@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Daily backup timer
+
+[Timer]
+OnCalendar={{ autorestic_schedule }}
+RandomizedDelaySec={{ autorestic_schedule_randomize }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

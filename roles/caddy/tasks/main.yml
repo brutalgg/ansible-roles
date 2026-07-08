@@ -1,0 +1,6 @@
+---
+- name: import caddy tasks
+  ansible.builtin.import_tasks: caddy.yml
+  tags:
+    - caddy
+  when: caddy_enabled | bool

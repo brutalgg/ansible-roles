@@ -1,0 +1,36 @@
+---
+# apt signing key
+docker_apt_gpg_url: https://download.docker.com/linux/{{ ansible_facts["distribution"] | lower }}/gpg
+docker_apt_ignore_key_error: true
+
+# apt repository
+docker_apt_release_channel: stable
+docker_apt_repository: https://download.docker.com/linux/{{ ansible_facts["distribution"] | lower }}
+
+# Configure root folder for all docker data, i.e volumes, etc.
+docker_data_folder: /var/lib/docker/
+
+# Extra daemon.json options merged over {"data-root": docker_data_folder}.
+# e.g. registry-mirrors / insecure-registries (internal registry), log-driver,
+# default-address-pools (avoid VLAN subnet clashes). a key here overrides data-root.
+docker_daemon_options: {}
+
+# docker package set, from https://docs.docker.com/engine/install/debian/.
+# provisioning installs these at state: present and never upgrades in place —
+# docker is treated as a plain os apt package and is upgraded by the fleet-wide
+# apt run (playbooks/update.yml), so this role has no dedicated update.yml
+# (docs/STANDARDS.md §3.1).
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+docker_packages_state: present
+
+# Service options
+docker_service_state: started
+docker_service_enabled: true
+
+# A list of users who will be added to the docker group
+docker_users: []

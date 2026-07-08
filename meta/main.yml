@@ -1,0 +1,12 @@
+---
+# Repo-root meta so `ansible-galaxy install` accepts this multi-role repository as
+# an installable git "role". The actual roles live under roles/ and are resolved
+# by pointing roles_path at roles/ansible-roles/roles in the consuming control repo.
+galaxy_info:
+  namespace: brutal
+  role_name: ansible_roles
+  author: brutal
+  description: Shared, environment-agnostic Ansible role library.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

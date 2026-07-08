@@ -1,0 +1,16 @@
+---
+# install the internal CA certificate into the system trust store so the host
+# trusts internal tls (gitea, the internal registry, inter-service https). default
+# true: every host inside the lab gets it. set false in group_vars for hosts that
+# live outside the lab and have no internal tls dependencies.
+lab_ca_enabled: true
+
+# Provide the CA certificate one of two ways (content wins if both set); each
+# environment has its own CA, so never ship a cert inside this shared role:
+#   lab_ca_cert_content — inline PEM, e.g. "{{ lab_root_ca }}" from a CA global.
+#   lab_ca_cert_src     — path to a cert file in the control repo.
+lab_ca_cert_content: ""
+lab_ca_cert_src: ""
+
+# filename the cert is stored under in /usr/local/share/ca-certificates/.
+lab_ca_cert_name: lab-ca.crt

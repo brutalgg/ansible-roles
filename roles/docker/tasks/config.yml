@@ -1,0 +1,56 @@
+---
+# steady-state docker configuration: the data-root directory + daemon.json, the
+# service, and docker-group membership. idempotent and re-applied on every
+# provisioning run. a daemon.json change notifies "restart docker" so a data-root
+# or daemon option converges via the handler.
+- name: ensure docker config directory exists
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: ensure docker data directory exists
+  ansible.builtin.file:
+    path: "{{ docker_data_folder }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: ensure docker daemon configuration exists
+  ansible.builtin.template:
+    src: daemon.json.j2
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart docker
+
+- name: ensure docker service configuration
+  ansible.builtin.service:
+    name: docker
+    state: "{{ docker_service_state }}"
+    enabled: "{{ docker_service_enabled }}"
+  # the docker service unit does not exist until the engine is installed, which
+  # is skipped under --check on a bare host (see install.yml); skip here too so a
+  # dry run does not error on a missing service. real runs are unaffected.
+  when: not ansible_check_mode or docker__engine.stat.exists
+
+- name: ensure docker group exists
+  ansible.builtin.group:
+    name: docker
+    state: present
+
+- name: ensure users are in docker group
+  ansible.builtin.user:
+    name: "{{ item }}"
+    groups: docker
+    append: true
+  loop: "{{ docker_users }}"
+  # under --check on a bare host the docker group is not actually created (the
+  # group task above only previews it), and the user module errors on a missing
+  # supplementary group — so skip here too. real runs are unaffected.
+  when: not ansible_check_mode or docker__engine.stat.exists
+  notify: flush user permissions

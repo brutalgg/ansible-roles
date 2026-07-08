@@ -1,0 +1,95 @@
+---
+- name: create autorestic config directory
+  ansible.builtin.file:
+    path: "{{ autorestic_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: create backup log directory
+  ansible.builtin.file:
+    path: "{{ autorestic_log_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: deploy restic password file
+  ansible.builtin.copy:
+    content: "{{ autorestic_restic_password }}"
+    dest: "{{ autorestic_config_dir }}/.restic-password"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: deploy autorestic config
+  ansible.builtin.template:
+    src: autorestic.yml.j2
+    dest: "{{ autorestic_config_dir }}/.autorestic.yml"
+    owner: root
+    group: root
+    mode: "0600"
+  notify: restart backup timer
+
+- name: deploy autorestic environment file
+  ansible.builtin.template:
+    src: autorestic.env.j2
+    dest: "{{ autorestic_config_dir }}/.autorestic.env"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: deploy backup wrapper script
+  ansible.builtin.template:
+    src: backup-wrapper.sh.j2
+    dest: "{{ autorestic_config_dir }}/backup-wrapper.sh"
+    owner: root
+    group: root
+    mode: "0700"
+  notify: restart backup timer
+
+- name: deploy restore helper script
+  ansible.builtin.template:
+    src: restore.sh.j2
+    dest: "{{ autorestic_config_dir }}/restore.sh"
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: deploy logrotate config
+  ansible.builtin.copy:
+    dest: /etc/logrotate.d/backup
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      {{ autorestic_log_dir }}/*.log {
+        daily
+        rotate {{ autorestic_log_retention_days }}
+        compress
+        missingok
+        notifempty
+      }
+
+- name: prime backup sources so hook-generated files exist before init
+  # `autorestic check` validates that every location's `from` path exists, but some
+  # sources (e.g. a pg_dump) are produced by a service's pre_commands hook at backup
+  # time. Run those hooks once here so a first-time init on a fresh host succeeds.
+  ansible.builtin.command:
+    cmd: "{{ item.1 }}"
+  loop: "{{ autorestic_services | subelements('pre_commands', skip_missing=true) }}"
+  loop_control:
+    label: "{{ item.0.name }}"
+  changed_when: true
+
+- name: initialize autorestic backends
+  ansible.builtin.command: >
+    {{ autorestic_install_path }} check
+    -c {{ autorestic_config_dir }}/.autorestic.yml
+  register: autorestic__check
+  changed_when: "'Initializing' in autorestic__check.stdout"
+  environment:
+    RESTIC_PASSWORD_FILE: "{{ autorestic_config_dir }}/.restic-password"

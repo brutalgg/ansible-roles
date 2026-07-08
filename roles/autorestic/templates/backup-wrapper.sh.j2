@@ -1,0 +1,93 @@
+#!/bin/bash
+{{ ansible_managed | comment }}
+set -euo pipefail
+
+LOG_DIR="{{ autorestic_log_dir }}"
+LOG_FILE="$LOG_DIR/backup-$(date +%Y%m%d-%H%M%S).log"
+DEST_DIR="{{ autorestic_dest_dir }}"
+INSTALL_DIR="{{ autorestic_config_dir }}"
+LOCK_FILE="/var/run/backup.lock"
+
+mkdir -p "$LOG_DIR"
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+log() { echo "[$(date -Iseconds)] $1"; }
+
+# Acquire exclusive lock
+exec 200>"$LOCK_FILE"
+if ! flock -n 200; then
+    log "Another backup is already running, exiting"
+    exit 0
+fi
+
+log "Backup run starting on {{ inventory_hostname }}"
+
+# Verify backup target is accessible
+{% if autorestic_nfs_managed %}
+if ! mountpoint -q "$DEST_DIR"; then
+    log "NFS not mounted, attempting mount..."
+    if ! mount "$DEST_DIR"; then
+        log "FATAL: NFS mount failed at $DEST_DIR"
+{% if autorestic_discord_webhook_url is defined %}
+        curl -sf --max-time 10 --retry 2 \
+            -H "Content-Type: application/json" \
+            -d "{\"embeds\":[{\"title\":\"Backup Failed - {{ inventory_hostname }}\",\"color\":15158332,\"description\":\"NFS mount unavailable at $DEST_DIR\",\"footer\":{\"text\":\"$(date -Iseconds)\"}}]}" \
+            "{{ autorestic_discord_webhook_url }}" || true
+{% endif %}
+        exit 1
+    fi
+fi
+{% else %}
+if [ ! -d "$DEST_DIR" ] || ! touch "$DEST_DIR/.backup-probe" 2>/dev/null; then
+    log "FATAL: Backup path $DEST_DIR is not accessible (Proxmox bind mount missing?)"
+{% if autorestic_discord_webhook_url is defined %}
+    curl -sf --max-time 10 --retry 2 \
+        -H "Content-Type: application/json" \
+        -d "{\"embeds\":[{\"title\":\"Backup Failed - {{ inventory_hostname }}\",\"color\":15158332,\"description\":\"Backup path unavailable at $DEST_DIR\",\"footer\":{\"text\":\"$(date -Iseconds)\"}}]}" \
+        "{{ autorestic_discord_webhook_url }}" || true
+{% endif %}
+    exit 1
+fi
+rm -f "$DEST_DIR/.backup-probe"
+{% endif %}
+
+# Pre-flight disk space check
+avail_kb=$(df --output=avail "$DEST_DIR" | tail -1 | tr -d ' ')
+if [ "$avail_kb" -lt 1048576 ]; then
+    log "WARNING: NFS mount has less than 1 GiB free (${avail_kb} KiB available)"
+fi
+
+# Run autorestic. The systemd timer is the sole scheduler, so back up every
+# location unconditionally rather than relying on autorestic's own cron logic.
+log "Starting autorestic backup"
+cd "$INSTALL_DIR"
+if {{ autorestic_install_path }} -c "$INSTALL_DIR/.autorestic.yml" --ci backup -a 2>&1; then
+    RESULT="success"
+    log "Backup run completed successfully"
+else
+    RESULT="failure"
+    log "Backup run completed with errors"
+fi
+
+{% if autorestic_discord_webhook_url is defined %}
+if [ "$RESULT" = "success" ]; then
+    COLOR=3066993
+    TITLE="Backup Complete - {{ inventory_hostname }}"
+else
+    COLOR=15158332
+    TITLE="Backup Failed - {{ inventory_hostname }}"
+fi
+
+DESCRIPTION="Finished at $(date -Iseconds)\nLog: $LOG_FILE"
+
+curl -sf --max-time 10 --retry 2 \
+    -H "Content-Type: application/json" \
+    -d "{\"embeds\":[{\"title\":\"$TITLE\",\"color\":$COLOR,\"description\":\"$DESCRIPTION\",\"footer\":{\"text\":\"$(date -Iseconds)\"}}]}" \
+    "{{ autorestic_discord_webhook_url }}" || log "WARNING: Discord notification failed"
+{% endif %}
+
+log "Backup run finished"
+
+if [ "$RESULT" = "failure" ]; then
+    exit 1
+fi

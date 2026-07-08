@@ -1,0 +1,3 @@
+---
+skip_list:
+  - name[casing]  # project convention: all task names are lowercase

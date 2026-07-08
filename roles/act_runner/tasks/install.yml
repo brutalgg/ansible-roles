@@ -1,0 +1,53 @@
+---
+- name: read the passwd database
+  ansible.builtin.getent:
+    database: passwd
+
+# create-if-absent: never usermod an existing account — the runner daemon runs as
+# this user, and modifying a busy user's home/uid fails ("currently used by
+# process"). a host already running act_runner keeps its account untouched.
+- name: ensure act runner user exists
+  ansible.builtin.user:
+    name: "{{ act_runner_user }}"
+    system: true
+    home: "{{ act_runner_home }}"
+    create_home: true
+    shell: /bin/bash
+  when: act_runner_user not in ansible_facts.getent_passwd
+
+- name: ensure act runner user is in the docker group
+  ansible.builtin.user:
+    name: "{{ act_runner_user }}"
+    groups: docker
+    append: true
+  when: act_runner_config_type == "container"
+
+- name: re-read the passwd database after ensuring the user
+  ansible.builtin.getent:
+    database: passwd
+
+- name: create act runner config directory
+  ansible.builtin.file:
+    path: "{{ act_runner_config_directory }}"
+    # owner resolves only once the account really exists; under --check on a fresh
+    # host the user isn't actually created, so omit rather than hard-fail the name
+    # lookup. real runs see the user (re-read above) and apply ownership.
+    owner: "{{ act_runner_user if act_runner_user in ansible_facts.getent_passwd else omit }}"
+    mode: "0755"
+    state: directory
+
+- name: check if act runner binary exists
+  ansible.builtin.stat:
+    path: "{{ act_runner_binary }}"
+  register: act_runner__bin
+
+# one-time bootstrap: fetch the pinned binary only when absent. version upgrades
+# are deliberate and live in update.yml, run via playbooks/update.yml --tags
+# act_runner (see docs/STANDARDS.md §3.1) — provisioning never upgrades in place.
+- name: download act runner binary
+  ansible.builtin.get_url:
+    url: "{{ act_runner_download_url }}"
+    dest: "{{ act_runner_binary }}"
+    mode: "0755"
+  when: not act_runner__bin.stat.exists
+  notify: restart act runner

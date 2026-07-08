@@ -1,0 +1,12 @@
+---
+- name: ensure gitea stack is up
+  community.docker.docker_compose_v2:
+    project_src: "{{ gitea_deploy_dir }}"
+    files:
+      - compose.yaml
+    state: present
+    pull: "{{ 'always' if gitea_force_pull else 'missing' }}"
+  # skip under --check on a host without the docker CLI (see main.yml detect):
+  # the module hard-errors when the CLI is absent. real runs, and check runs on
+  # a host that already has docker, are unaffected.
+  when: not ansible_check_mode or gitea__docker_cli.stat.exists

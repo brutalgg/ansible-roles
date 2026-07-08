@@ -1,0 +1,18 @@
+---
+# out-of-band upgrade. NOT imported by main.yml — a provisioning run must never
+# silently upgrade gitea (docs/STANDARDS.md §2.1). the consumer runs this
+# deliberately, e.g.:
+#   ansible.builtin.import_role: { name: gitea, tasks_from: update.yml }
+# after bumping gitea_version / gitea_postgres_version.
+
+- name: re-render gitea config for the new version
+  ansible.builtin.import_tasks: config.yml
+
+- name: pull new images and recreate the stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ gitea_deploy_dir }}"
+    files:
+      - compose.yaml
+    state: present
+    pull: always
+    recreate: auto

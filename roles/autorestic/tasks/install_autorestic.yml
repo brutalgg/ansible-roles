@@ -1,0 +1,84 @@
+---
+- name: ensure autorestic dependencies are installed
+  ansible.builtin.package:
+    name:
+      - bash
+      - wget
+      - bzip2
+    state: present
+
+- name: check for autorestic binary
+  ansible.builtin.stat:
+    path: "{{ autorestic_install_path }}"
+  register: autorestic__is_installed
+
+- name: set autorestic installed fact
+  ansible.builtin.set_fact:
+    autorestic__installed: "{{ autorestic__is_installed.stat.exists }}"
+
+- name: check installed autorestic version
+  ansible.builtin.shell:
+    cmd: "set -o pipefail && {{ autorestic__is_installed.stat.path }} --version | grep -oP 'autorestic\\ version\\ \\K[0-9]*\\.[0-9]*\\.[0-9]*'"
+    executable: /bin/bash
+  register: autorestic__installed_version
+  changed_when: false
+  when: autorestic__installed
+  check_mode: false   # read-only; must run under --check so the version compare below is correct
+
+- name: check latest autorestic version on github
+  ansible.builtin.uri:
+    url: https://api.github.com/repos/cupcakearmy/autorestic/releases/latest
+    url_username: "{{ github_api_user | default(omit) }}"
+    url_password: "{{ github_api_pass | default(omit) }}"
+    return_content: true
+    force_basic_auth: "{{ github_api_auth | default(omit) }}"
+  register: autorestic__latest_release
+  when: autorestic_use_latest
+  check_mode: false   # read-only GET; must run under --check so .json is available below
+
+- name: set autorestic target version (latest)
+  ansible.builtin.set_fact:
+    autorestic__target_version: "{{ autorestic__latest_release.json.tag_name | regex_replace('v') }}"
+  when: autorestic_use_latest
+
+- name: set autorestic target version (pinned)
+  ansible.builtin.set_fact:
+    autorestic__target_version: "{{ autorestic_version }}"
+  when: not autorestic_use_latest
+
+- name: install or update autorestic binary
+  when: >
+    not autorestic__installed
+    or (autorestic_use_latest and autorestic__installed_version.stdout != autorestic__target_version)
+    or (not autorestic_use_latest and autorestic__installed_version.stdout != autorestic_version)
+  block:
+    - name: clean autorestic download directory
+      ansible.builtin.file:
+        path: "{{ autorestic_download_directory }}"
+        state: absent
+
+    - name: create autorestic download directory
+      ansible.builtin.file:
+        path: "{{ autorestic_download_directory }}"
+        state: directory
+        mode: "0755"
+
+    - name: download autorestic
+      ansible.builtin.get_url:
+        url: "{{ autorestic_gh_url }}/v{{ autorestic__target_version }}/autorestic_{{ autorestic__target_version }}_{{ autorestic_distro }}.bz2"
+        dest: "{{ autorestic_download_directory }}"
+        force: true
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: set autorestic archive filename
+      ansible.builtin.set_fact:
+        autorestic__archive: "autorestic_{{ autorestic__target_version }}_{{ autorestic_distro }}.bz2"
+
+    - name: extract and deploy autorestic binary
+      ansible.builtin.shell: >-
+        cd {{ autorestic_download_directory }} &&
+        bzip2 -d {{ autorestic__archive }} &&
+        mv {{ autorestic__archive | regex_replace('.bz2') }} {{ autorestic_install_path }}
+      changed_when: true

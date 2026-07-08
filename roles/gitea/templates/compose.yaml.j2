@@ -1,0 +1,75 @@
+# {{ ansible_managed }}
+services:
+  server:
+    image: {{ gitea_image }}
+    user: "{{ gitea_uid }}:{{ gitea_gid }}"
+    restart: always
+    environment:
+      - GITEA__database__DB_TYPE=postgres
+      - GITEA__database__HOST=db:5432
+      - GITEA__database__NAME={{ gitea_db_name }}
+      - GITEA__database__USER={{ gitea_db_user }}
+      - GITEA__database__PASSWD={{ gitea_postgres_password }}
+    volumes:
+{% if gitea_data_bind | length > 0 %}
+      - {{ gitea_data_bind }}:/var/lib/gitea
+{% else %}
+      - data:/var/lib/gitea
+{% endif %}
+      - ./gitea:/etc/gitea
+{% if gitea_backups_bind | length > 0 %}
+      - {{ gitea_backups_bind }}:/backups
+{% endif %}
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/ssl/certs:/etc/ssl/certs:ro
+    ports:
+      - "{{ gitea_http_bind }}:{{ gitea_http_published_port }}:3000"
+      - "{{ gitea_ssh_bind }}:{{ gitea_ssh_published_port }}:2222"
+    healthcheck:
+{% if gitea_tls_enabled %}
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--no-check-certificate", "--spider", "https://localhost:3000/api/healthz"]
+{% else %}
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/healthz"]
+{% endif %}
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: {{ gitea_postgres_image }}
+    restart: always
+    environment:
+      - POSTGRES_USER={{ gitea_db_user }}
+      - POSTGRES_PASSWORD={{ gitea_postgres_password }}
+      - POSTGRES_DB={{ gitea_db_name }}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - postgres:{{ gitea_postgres_data_dir }}
+
+volumes:
+{% if gitea_data_bind | length == 0 %}
+  data:
+{% if gitea_data_volume_opts %}
+    driver_opts:
+{% for key, value in gitea_data_volume_opts.items() %}
+      {{ key }}: "{{ value }}"
+{% endfor %}
+{% endif %}
+{% endif %}
+  postgres:
+{% if gitea_postgres_volume_opts %}
+    driver_opts:
+{% for key, value in gitea_postgres_volume_opts.items() %}
+      {{ key }}: "{{ value }}"
+{% endfor %}
+{% endif %}

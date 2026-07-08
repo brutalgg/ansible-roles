@@ -1,0 +1,26 @@
+---
+- name: detect dietpi
+  ansible.builtin.stat:
+    path: /boot/dietpi/.version
+  register: base__dietpi
+  changed_when: false
+
+- name: configure host identity on non-dietpi systems
+  when: not base__dietpi.stat.exists
+  block:
+    - name: ensure timezone '{{ base_timezone }}'
+      community.general.timezone:
+        name: "{{ base_timezone }}"
+
+    - name: ensure correct hostname
+      ansible.builtin.hostname:
+        name: "{{ inventory_hostname }}"
+
+    - name: ensure hosts file hostname
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        insertafter: ^127\.0\.0\.1 *localhost
+        line: "127.0.0.1 {{ inventory_hostname }}"
+        owner: root
+        group: root
+        mode: '0644'

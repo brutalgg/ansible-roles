@@ -1,0 +1,230 @@
+#!/bin/bash
+{{ ansible_managed | comment }}
+set -euo pipefail
+
+INSTALL_DIR="{{ autorestic_config_dir }}"
+CONFIG_FILE="$INSTALL_DIR/.autorestic.yml"
+PASSWORD_FILE="$INSTALL_DIR/.restic-password"
+
+usage() {
+    cat <<'EOF'
+Usage:
+  restore.sh list    <service>                              List available snapshots
+  restore.sh restore <service> [snapshot-id] [options]      Restore a service
+  restore.sh verify  <service>                              Verify repo integrity
+
+Options:
+  --volume <name>    Restore only a specific volume (default: all)
+  --yes              Skip confirmation prompt
+
+Examples:
+  restore.sh list gitea
+  restore.sh restore gitea                    # restore latest snapshot
+  restore.sh restore gitea abc123             # restore specific snapshot
+  restore.sh restore immich latest --volume immich_db
+EOF
+    exit 1
+}
+
+log() { echo "[$(date -Iseconds)] $1"; }
+
+get_repo_path() {
+    local service="$1"
+
+    # The backend path in the autorestic config is the single source of truth for where
+    # each repo lives — it already reflects whether the hostname is part of the path, so
+    # read it straight out rather than re-deriving (which double-counted the hostname).
+    grep -oP 'path:\s*\K\S+' "$CONFIG_FILE" | grep -E "/${service}\$" | head -1
+}
+
+get_compose_path() {
+    local service="$1"
+    local in_location=0
+    local found_service=0
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^[[:space:]]+${service}:$ ]] && [ $in_location -eq 1 ]; then
+            found_service=1
+            continue
+        fi
+        if [[ "$line" =~ ^locations: ]]; then
+            in_location=1
+            continue
+        fi
+        if [ $found_service -eq 1 ] && [[ "$line" =~ docker\ compose\ -f\ (.+)/docker-compose\.yml ]]; then
+            echo "${BASH_REMATCH[1]}"
+            return
+        fi
+        if [ $found_service -eq 1 ] && [[ "$line" =~ ^[[:space:]]+[a-z] ]] && [[ ! "$line" =~ ^[[:space:]]+(from|to|cron|forget|hooks|before|after|failure|-)  ]]; then
+            break
+        fi
+    done < "$CONFIG_FILE"
+}
+
+get_volumes() {
+    local service="$1"
+    local in_location=0
+    local found_service=0
+    local in_from=0
+    local volumes=()
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^locations: ]]; then
+            in_location=1
+            continue
+        fi
+        if [ $in_location -eq 1 ] && [[ "$line" =~ ^[[:space:]]+${service}:$ ]]; then
+            found_service=1
+            continue
+        fi
+        if [ $found_service -eq 1 ] && [[ "$line" =~ ^[[:space:]]+from: ]]; then
+            in_from=1
+            continue
+        fi
+        if [ $in_from -eq 1 ] && [[ "$line" =~ ^[[:space:]]+-[[:space:]]/var/lib/docker/volumes/([^/]+)/ ]]; then
+            volumes+=("${BASH_REMATCH[1]}")
+            continue
+        fi
+        if [ $in_from -eq 1 ] && [[ ! "$line" =~ ^[[:space:]]*- ]]; then
+            break
+        fi
+    done < "$CONFIG_FILE"
+
+    echo "${volumes[@]}"
+}
+
+cmd_list() {
+    local service="$1"
+    local repo_path
+    repo_path=$(get_repo_path "$service")
+
+    if [ ! -f "$repo_path/config" ]; then
+        log "ERROR: No restic repo found for service '$service' at $repo_path"
+        exit 1
+    fi
+
+    log "Listing snapshots for: $service"
+    echo "Repository: $repo_path"
+    echo ""
+    restic snapshots --repo "$repo_path" --password-file "$PASSWORD_FILE"
+}
+
+cmd_restore() {
+    local service="$1"
+    local snapshot="${2:-latest}"
+    local target_volume=""
+    local skip_confirm=0
+
+    shift 2 2>/dev/null || shift 1 2>/dev/null || true
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --volume) target_volume="$2"; shift 2 ;;
+            --yes) skip_confirm=1; shift ;;
+            *) log "Unknown option: $1"; usage ;;
+        esac
+    done
+
+    local repo_path compose_path volumes
+    repo_path=$(get_repo_path "$service")
+    compose_path=$(get_compose_path "$service")
+    read -ra volumes <<< "$(get_volumes "$service")"
+
+    if [ ! -f "$repo_path/config" ]; then
+        log "ERROR: No restic repo found for service '$service'"
+        exit 1
+    fi
+
+    if [ -n "$target_volume" ]; then
+        volumes=("$target_volume")
+    fi
+
+    log "Restore plan:"
+    log "  Service:   $service"
+    log "  Snapshot:  $snapshot"
+    log "  Volumes:   ${volumes[*]}"
+    log "  Compose:   $compose_path"
+    echo ""
+
+    if [ "$skip_confirm" -ne 1 ]; then
+        read -rp "Proceed with restore? (y/N) " confirm
+        if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+            log "Restore cancelled"
+            exit 0
+        fi
+    fi
+
+    local timestamp
+    timestamp=$(date +%Y%m%d-%H%M%S)
+
+    log "Stopping service..."
+    if [ -n "$compose_path" ] && [ -f "$compose_path/docker-compose.yml" ]; then
+        docker compose -f "$compose_path/docker-compose.yml" stop --timeout 120
+    else
+        log "WARNING: Could not find compose path, skipping container stop"
+    fi
+
+    for vol in "${volumes[@]}"; do
+        local vol_path="/var/lib/docker/volumes/${vol}/_data"
+
+        if [ ! -d "$vol_path" ]; then
+            log "WARNING: Volume path $vol_path does not exist, creating it"
+            mkdir -p "$vol_path"
+            continue
+        fi
+
+        log "Preserving current data: ${vol_path} -> ${vol_path}.pre-restore-${timestamp}"
+        mv "$vol_path" "${vol_path}.pre-restore-${timestamp}"
+        mkdir -p "$vol_path"
+    done
+
+    log "Restoring from snapshot: $snapshot"
+    restic restore "$snapshot" \
+        --repo "$repo_path" \
+        --password-file "$PASSWORD_FILE" \
+        --target /
+
+    log "Starting service..."
+    if [ -n "$compose_path" ] && [ -f "$compose_path/docker-compose.yml" ]; then
+        docker compose -f "$compose_path/docker-compose.yml" start
+    fi
+
+    log "Restore complete"
+    log "Previous data preserved at:"
+    for vol in "${volumes[@]}"; do
+        log "  /var/lib/docker/volumes/${vol}/_data.pre-restore-${timestamp}"
+    done
+    log "Remove manually once you've verified the restore is good."
+}
+
+cmd_verify() {
+    local service="$1"
+    local repo_path
+    repo_path=$(get_repo_path "$service")
+
+    if [ ! -f "$repo_path/config" ]; then
+        log "ERROR: No restic repo found for service '$service'"
+        exit 1
+    fi
+
+    log "Verifying repository integrity for: $service"
+    restic check --repo "$repo_path" --password-file "$PASSWORD_FILE"
+    log "Verification complete"
+}
+
+# --- Main ---
+
+if [ $# -lt 2 ]; then
+    usage
+fi
+
+command="$1"
+service="$2"
+shift 2
+
+case "$command" in
+    list)    cmd_list "$service" ;;
+    restore) cmd_restore "$service" "$@" ;;
+    verify)  cmd_verify "$service" ;;
+    *)       usage ;;
+esac

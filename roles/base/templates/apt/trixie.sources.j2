@@ -1,0 +1,12 @@
+# {{ ansible_managed }}
+Types: deb
+URIs: {{ base_apt_mirror }}
+Suites: trixie trixie-updates
+Components: contrib main
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+
+Types: deb
+URIs: {{ base_apt_security_mirror }}
+Suites: trixie-security
+Components: contrib main
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg

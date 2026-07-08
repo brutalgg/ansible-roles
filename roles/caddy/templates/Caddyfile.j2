@@ -1,0 +1,29 @@
+# {{ ansible_managed }}
+{% for site in caddy_sites %}
+{{ site.domains | join(' ') }} {
+    reverse_proxy {{ site.upstream }}
+
+{% if site.tls_cert is defined %}
+    tls {{ caddy_ssl_dir }}/{{ site.name }}.crt {{ caddy_ssl_dir }}/{{ site.name }}.key
+{% elif site.tls_internal | default(false) %}
+    tls internal
+{% else %}
+    tls {
+{% if caddy_dns_challenge_enabled %}
+        dns {{ caddy_dns_provider }} {env.{{ caddy_dns_token_env }}}
+        resolvers {{ caddy_resolvers | join(' ') }}
+{% endif %}
+{% if site.tls_staging | default(caddy_le_staging) %}
+        ca {{ caddy_acme_ca_staging_url }}
+{% else %}
+        ca {{ caddy_acme_ca_url }}
+{% endif %}
+    }
+{% endif %}
+
+    log {
+        output file /var/log/caddy/{{ site.name }}-access.log
+        format console
+    }
+}
+{% endfor %}

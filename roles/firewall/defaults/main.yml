@@ -1,0 +1,16 @@
+---
+# firewall — host-level ufw manager. A shared facility any host can use: the host
+# declares the complete set of ports it exposes in a single `firewall_rules` list
+# (at host_vars or group_vars scope), and this role realizes it. Application roles
+# do NOT manage ufw themselves — they just need their ports present in that list.
+# No cross-scope var merging: one list, one source, adjusted at the host level.
+
+firewall_manage: true
+# allow inbound SSH before the default-deny policy is applied, so enabling ufw can
+# never strand the Ansible/SSH connection.
+firewall_allow_ssh: true
+
+# the host's exposed ports. list of maps:
+#   { port: "443", proto: "tcp"|"udp" (default tcp), from: "<cidr>" (default any),
+#     comment: "...", rule: "allow"|"deny" (default allow) }
+firewall_rules: []

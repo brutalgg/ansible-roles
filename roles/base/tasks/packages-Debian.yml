@@ -1,0 +1,73 @@
+---
+- name: detect dietpi
+  ansible.builtin.stat:
+    path: /boot/dietpi/.version
+  register: base__dietpi
+  changed_when: false
+
+- name: set deb822 usage fact
+  ansible.builtin.set_fact:
+    base__use_deb822: >-
+      {{
+        (ansible_facts['distribution'] | lower == 'debian')
+        and
+        (ansible_facts['distribution_major_version'] is version('13', '>='))
+        and
+        (not base__dietpi.stat.exists)
+      }}
+
+- name: ensure apt sources for dietpi
+  ansible.builtin.template:
+    src: "apt/sources_dietpi.list.j2"
+    dest: /etc/apt/sources.list.d/dietpi.list
+    owner: root
+    group: root
+    mode: '0644'
+  when:
+    - base__dietpi.stat.exists
+
+- name: ensure apt sources for debian 13+ using deb822
+  ansible.builtin.template:
+    src: "apt/{{ ansible_facts['distribution_release'] }}.sources.j2"
+    dest: "/etc/apt/sources.list.d/debian.sources"
+    owner: root
+    group: root
+    mode: '0644'
+  when:
+    - base__use_deb822
+
+- name: ensure apt sources for other distributions
+  ansible.builtin.template:
+    src: "apt/sources_{{ ansible_facts['distribution_release'] | lower }}.list.j2"
+    dest: /etc/apt/sources.list
+    owner: root
+    group: root
+    mode: '0644'
+  when:
+    - not base__dietpi.stat.exists
+    - not base__use_deb822
+
+# - name: Remove /etc/apt/sources.list for excluded releases
+#   ansible.builtin.file:
+#     path: /etc/apt/sources.list
+#     state: absent
+#   when: ansible_facts['distribution_release'] in excluded_apt_sources
+
+# - name: Remove /etc/apt/sources.list.d/debian.sources for excluded releases
+#   ansible.builtin.file:
+#     path: "/etc/apt/sources.list.d/debian.sources"
+#     state: absent
+#   when: ansible_facts['distribution_release'] in excluded_apt_sources
+
+# provisioning refreshes the cache and installs required packages but does NOT
+# upgrade versions or reboot — that is the deliberate, out-of-band update path
+# (tasks/update.yml, reached via playbooks/update.yml). see docs/STANDARDS.md §3.1.
+- name: update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 86400
+
+- name: ensure extra packages present
+  ansible.builtin.package:
+    name: "{{ base_extra_packages }}"
+    state: present

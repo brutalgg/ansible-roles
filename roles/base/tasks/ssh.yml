@@ -1,0 +1,41 @@
+---
+- name: detect openssh installation
+  ansible.builtin.stat:
+    path: /usr/sbin/sshd
+  register: base__openssh_bin
+
+# - name: detect dropbear
+#   stat:
+#     path: /usr/sbin/dropbear
+#   register: dropbear_bin
+
+- name: ensure openssh hardening
+  when: base__openssh_bin.stat.exists
+  block:
+    - name: ensure modern host key
+      ansible.builtin.lineinfile:
+        dest: /etc/ssh/sshd_config
+        line: 'HostKey /etc/ssh/ssh_host_ed25519_key'
+        insertafter: EOF
+        state: present
+      notify:
+        - generate missing host keys
+        - restart ssh
+
+    - name: ensure password auth setting
+      ansible.builtin.lineinfile:
+        path: '/etc/ssh/sshd_config'
+        regexp: '^(.*)PasswordAuthentication(.*)$'
+        line: "PasswordAuthentication {{ base_ssh_password_authentication | ternary('yes', 'no') }}"
+        state: present
+      notify:
+        - restart ssh
+
+    - name: ensure root login setting
+      ansible.builtin.lineinfile:
+        path: '/etc/ssh/sshd_config'
+        regexp: '^(.*)PermitRootLogin(.*)$'
+        line: "PermitRootLogin {{ base_ssh_permit_root_login }}"
+        state: present
+      notify:
+        - restart ssh

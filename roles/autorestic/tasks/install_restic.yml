@@ -1,0 +1,6 @@
+---
+- name: ensure restic is installed
+  ansible.builtin.package:
+    name:
+      - restic
+    state: present

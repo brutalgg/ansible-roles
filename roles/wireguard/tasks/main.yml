@@ -1,0 +1,102 @@
+---
+- name: validate wireguard variables
+  ansible.builtin.assert:
+    that:
+      - wireguard_interface | length > 0
+      - wireguard_addresses | length > 0
+    fail_msg: "wireguard requires wireguard_interface and at least one cidr in wireguard_addresses (set per host in host_vars)."
+
+- name: install wireguard
+  ansible.builtin.apt:
+    name: wireguard
+    state: present
+    update_cache: true
+
+# check-mode gate: on a bare host a dry run installs nothing, so `wg` is absent
+# and the key handling below cannot work (CONVENTIONS.md check-mode safety).
+- name: detect the wg binary
+  ansible.builtin.stat:
+    path: /usr/bin/wg
+  register: wireguard__wg
+  changed_when: false
+
+- name: detect an existing interface config
+  ansible.builtin.stat:
+    path: "{{ wireguard_remote_directory }}/{{ wireguard_interface }}.conf"
+  register: wireguard__conf
+  changed_when: false
+
+- name: reuse the private key from the deployed config
+  when:
+    - wireguard_private_key | length == 0
+    - wireguard__conf.stat.exists
+  no_log: true
+  block:
+    - name: read the deployed config
+      ansible.builtin.slurp:
+        src: "{{ wireguard_remote_directory }}/{{ wireguard_interface }}.conf"
+      register: wireguard__deployed
+
+    - name: keep the deployed private key
+      ansible.builtin.set_fact:
+        wireguard_private_key: "{{ wireguard__deployed.content | b64decode | regex_search('PrivateKey *= *(\\S+)', '\\1') | first }}"
+
+- name: generate a private key
+  ansible.builtin.command: wg genkey
+  when:
+    - wireguard_private_key | length == 0
+    - not wireguard__conf.stat.exists
+    - not ansible_check_mode or wireguard__wg.stat.exists
+  register: wireguard__genkey
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+- name: adopt the generated private key
+  ansible.builtin.set_fact:
+    wireguard_private_key: "{{ wireguard__genkey.stdout }}"
+  when: wireguard__genkey is not skipped
+  no_log: true
+
+- name: derive the public key
+  ansible.builtin.command: wg pubkey
+  args:
+    stdin: "{{ wireguard_private_key }}"
+  when: not ansible_check_mode or wireguard__wg.stat.exists
+  register: wireguard__pubkey
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+# published (not role-private) so the other play hosts' templates can read it
+# from hostvars — the one cross-host fact the mesh needs.
+- name: publish the public key for the other play hosts
+  ansible.builtin.set_fact:
+    wireguard__public_key: "{{ wireguard__pubkey.stdout }}"
+  when: wireguard__pubkey is not skipped
+
+- name: create the wireguard directory
+  ansible.builtin.file:
+    path: "{{ wireguard_remote_directory }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: render the interface config
+  ansible.builtin.template:
+    src: wg.conf.j2
+    dest: "{{ wireguard_remote_directory }}/{{ wireguard_interface }}.conf"
+    owner: root
+    group: root
+    mode: "0600"
+  when: not ansible_check_mode or wireguard__wg.stat.exists
+  no_log: true
+  notify: restart wireguard
+
+- name: manage the wg-quick service
+  ansible.builtin.systemd:
+    name: "wg-quick@{{ wireguard_interface }}"
+    enabled: "{{ wireguard_service_enabled }}"
+    state: "{{ wireguard_service_state }}"
+  when: not ansible_check_mode or wireguard__wg.stat.exists

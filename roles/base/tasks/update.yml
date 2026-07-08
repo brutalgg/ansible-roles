@@ -1,0 +1,8 @@
+---
+# deliberate "upgrade to newest" function for the os baseline — the analogue of a
+# service role's explicit, opt-in upgrade path (a vendor updater or `state: latest`).
+# NOT imported by main.yml
+# (see docs/STANDARDS.md §3.1); reached via playbooks/update.yml. dispatches to the
+# os-family upgrade tasks, mirroring tasks/packages.yml ([3.2](docs/STANDARDS.md)).
+- name: include os-family update tasks
+  ansible.builtin.include_tasks: "update-{{ ansible_facts['os_family'] }}.yml"

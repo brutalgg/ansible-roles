@@ -1,0 +1,36 @@
+---
+# deploys operator-supplied cert/key material for any caddy_sites entry that
+# carries tls_cert/tls_key. sites using acme or `tls internal` skip this entirely.
+
+- name: ensure caddy ssl dir exists
+  ansible.builtin.file:
+    path: "{{ caddy_ssl_dir }}"
+    state: directory
+    owner: "{{ caddy_user }}"
+    group: "{{ caddy_group }}"
+    mode: "0750"
+
+- name: deploy site tls certs
+  ansible.builtin.copy:
+    content: "{{ item.tls_cert }}"
+    dest: "{{ caddy_ssl_dir }}/{{ item.name }}.crt"
+    owner: "{{ caddy_user }}"
+    group: "{{ caddy_group }}"
+    mode: "0644"
+  loop: "{{ caddy_sites | selectattr('tls_cert', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.name }}.crt"
+  notify: reload caddy
+
+- name: deploy site tls keys
+  ansible.builtin.copy:
+    content: "{{ item.tls_key }}"
+    dest: "{{ caddy_ssl_dir }}/{{ item.name }}.key"
+    owner: "{{ caddy_user }}"
+    group: "{{ caddy_group }}"
+    mode: "0640"
+  loop: "{{ caddy_sites | selectattr('tls_cert', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.name }}.key"
+  no_log: true
+  notify: reload caddy

@@ -1,0 +1,12 @@
+# {{ ansible_managed }}
+# See http://www.debian.org/releases/stable/i386/release-notes/ch-upgrading.html
+# for how to upgrade to newer versions of the distribution.
+deb {{ base_apt_mirror }} bookworm main
+deb-src {{ base_apt_mirror }} bookworm main
+
+# Major bug fix updates produced after the final release of the
+# distribution.
+deb {{ base_apt_security_mirror }} bookworm-security main
+deb-src {{ base_apt_security_mirror }} bookworm-security main
+deb {{ base_apt_mirror }} bookworm-updates main
+deb-src {{ base_apt_mirror }} bookworm-updates main

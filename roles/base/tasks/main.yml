@@ -1,0 +1,27 @@
+---
+- name: load os-family variables
+  ansible.builtin.include_vars: "{{ item }}"
+  with_first_found:
+    - "{{ ansible_facts['distribution'] }}.yml"
+    - "{{ ansible_facts['os_family'] }}.yml"
+  tags:
+    - always
+
+- name: import package and repository tasks
+  ansible.builtin.import_tasks: packages.yml
+  tags:
+    - packages
+    - apt
+
+- name: import ssh tasks
+  ansible.builtin.import_tasks: ssh.yml
+  tags:
+    - ssh
+
+# user/group account management lives in the separate `accounts` role — base only
+# owns host-level concerns (apt, sshd hardening, timezone/hostname/misc).
+
+- name: import misc tasks
+  ansible.builtin.import_tasks: misc.yml
+  tags:
+    - misc

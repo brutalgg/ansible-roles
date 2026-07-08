@@ -1,0 +1,45 @@
+---
+- name: install act runner config
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ act_runner_config_directory }}/config.yaml"
+    mode: "0644"
+  notify: restart act runner
+
+- name: register act runner
+  ansible.builtin.command:
+    cmd: >-
+      {{ act_runner_binary }} register --no-interactive
+      -c {{ act_runner_config_directory }}/config.yaml
+      --instance {{ act_runner_gitea_instance_url }}
+      --token {{ act_runner_token }}
+      --name {{ act_runner_name }}
+      --labels {{ act_runner_labels | join(',') }}
+    creates: "{{ act_runner_runner_file }}"
+    chdir: "{{ act_runner_home }}"
+  environment:
+    HOME: "{{ act_runner_home }}"
+  no_log: true
+
+- name: ensure act runner home ownership
+  ansible.builtin.file:
+    path: "{{ act_runner_home }}"
+    # see install.yml: omit under --check on a fresh host where the account is not
+    # yet really created, so the name lookup does not hard-fail.
+    owner: "{{ act_runner_user if act_runner_user in ansible_facts.getent_passwd else omit }}"
+    group: "{{ act_runner_user if act_runner_user in ansible_facts.getent_passwd else omit }}"
+    recurse: true
+
+- name: install systemd service
+  ansible.builtin.template:
+    src: act_runner.service.j2
+    dest: /etc/systemd/system/act_runner.service
+    mode: "0644"
+  notify: restart act runner
+
+- name: enable and start act runner
+  ansible.builtin.systemd:
+    name: act_runner
+    enabled: true
+    state: started
+    daemon_reload: true

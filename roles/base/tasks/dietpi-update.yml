@@ -1,0 +1,18 @@
+---
+# intentional, opt-in dietpi platform update — only runs when explicitly requested
+# via playbooks/update.yml --tags dietpi (the play carries the `never` tag).
+# regular package upgrades happen through tasks/update.yml (apt). a no-op on
+# non-dietpi hosts.
+- name: detect dietpi
+  ansible.builtin.stat:
+    path: /boot/dietpi/.version
+  register: base__dietpi
+  changed_when: false
+
+# `dietpi-update 1` is the non-interactive "apply updates" mode. it may require a
+# reboot afterwards; this play runs serial: 1 so the dns pair is never both down.
+- name: run dietpi-update
+  ansible.builtin.command: /boot/dietpi/dietpi-update 1
+  register: base__dietpi_update
+  changed_when: true
+  when: base__dietpi.stat.exists

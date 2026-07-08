@@ -1,0 +1,39 @@
+---
+- name: validate required gitea secrets
+  ansible.builtin.assert:
+    that:
+      - gitea_postgres_password | length > 0
+      - gitea_secret_key | length > 0
+      - gitea_internal_token | length > 0
+      - gitea_jwt_secret | length > 0
+      - gitea_lfs_jwt_secret | length > 0
+    fail_msg: >-
+      gitea requires gitea_postgres_password, gitea_secret_key,
+      gitea_internal_token, gitea_jwt_secret and gitea_lfs_jwt_secret to be set
+      (wire them from your vault in the consuming play).
+    quiet: true
+
+- name: validate native tls material
+  ansible.builtin.assert:
+    that:
+      - gitea_tls_cert | length > 0
+      - gitea_tls_key | length > 0
+    fail_msg: "gitea_tls_enabled requires gitea_tls_cert and gitea_tls_key to be set."
+    quiet: true
+  when: gitea_tls_enabled
+
+# detect the docker CLI so the compose deploy and its handlers can skip cleanly
+# under --check on a host that does not have docker yet. kept role-local (not
+# borrowed from the docker role's fact) because gitea supports app-only runs
+# without the baseline play — see deploy_gitea.yml --tags gitea.
+- name: detect docker cli
+  ansible.builtin.stat:
+    path: /usr/bin/docker
+  register: gitea__docker_cli
+  changed_when: false
+
+- name: import config tasks
+  ansible.builtin.import_tasks: config.yml
+
+- name: import deploy tasks
+  ansible.builtin.import_tasks: deploy.yml

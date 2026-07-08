@@ -1,0 +1,34 @@
+---
+# ensure the passwordless-sudo admin group exists — only when at least one
+# managed account requests sudo.
+- name: determine whether any account requires sudo
+  ansible.builtin.set_fact:
+    accounts__need_sudo: >-
+      {{ accounts_users | selectattr('sudo', 'defined') | selectattr('sudo') | list | length > 0 }}
+
+- name: configure passwordless sudo group
+  when: accounts__need_sudo | bool
+  block:
+    - name: ensure sudo is present
+      ansible.builtin.package:
+        name: sudo
+        state: present
+
+    - name: ensure admin group {{ accounts_admin_group }}
+      ansible.builtin.group:
+        name: "{{ accounts_admin_group }}"
+        state: present
+
+    # drop-in under /etc/sudoers.d rather than editing the monolithic
+    # /etc/sudoers: atomic, self-contained, and safe under --check on a bare
+    # host where the sudo package (and thus /etc/sudoers) is not yet present.
+    # validation: detect => visudo -cf runs only when visudo is available, so
+    # a dry run before sudo is installed reports the change instead of failing.
+    - name: ensure passwordless sudo for {{ accounts_admin_group }}
+      community.general.sudoers:
+        name: "{{ accounts_admin_group }}-nopasswd"
+        group: "{{ accounts_admin_group }}"
+        commands: ALL
+        nopassword: true
+        state: present
+        validation: detect
