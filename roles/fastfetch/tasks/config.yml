@@ -1,0 +1,25 @@
+---
+# optional system-wide config. /etc/fastfetch/config.jsonc is fastfetch's
+# system-wide search path; per-user ~/.config/fastfetch/config.jsonc overrides
+# it. the content is environment-specific and lives in the control repo — an
+# empty fastfetch_config leaves any existing file unmanaged (same contract as
+# lab_ca_cert_content).
+
+- name: manage the system-wide fastfetch config
+  when: fastfetch_config | length > 0
+  block:
+    - name: ensure the fastfetch config directory exists
+      ansible.builtin.file:
+        path: /etc/fastfetch
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: write the system-wide fastfetch config
+      ansible.builtin.copy:
+        content: "{{ fastfetch_config }}"
+        dest: /etc/fastfetch/config.jsonc
+        owner: root
+        group: root
+        mode: "0644"

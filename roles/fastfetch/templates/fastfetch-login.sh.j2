@@ -1,0 +1,7 @@
+# {{ ansible_managed }}
+# show fastfetch on interactive ssh logins only: sessions with no tty
+# (scp/sftp/rsync/ansible) and local console logins stay quiet. sourced by
+# bash/sh via /etc/profile.d and by zsh via the managed /etc/zsh/zprofile block.
+if [ -n "$SSH_CONNECTION" ] && [ -t 1 ] && command -v fastfetch >/dev/null 2>&1; then
+    {{ fastfetch_login_command }}
+fi

@@ -140,6 +140,25 @@ firewall_rules:
   - { port: "2376", proto: tcp, from: "10.9.0.0/24", comment: "docker api (tunnel only)" }
 ```
 
+### `fastfetch` — system info on ssh login
+Installs [fastfetch](https://github.com/fastfetch-cli/fastfetch) (distro package
+where one exists, GitHub releases `.deb` otherwise) and shows it on interactive
+SSH logins via `/etc/profile.d` — chosen over motd because `~/.hushlogin` (see
+`accounts`) silences pam_motd but not profile.d. zsh login shells don't read
+`/etc/profile.d`, so a managed block in `/etc/zsh/zprofile` sources the same
+snippet where zsh is installed. Provisioning installs once and never upgrades;
+the deliberate upgrade is `tasks_from: update.yml` (honors the shared
+`github_api_*` globals for the release lookup).
+
+| Variable | Default | Notes |
+|---|---|---|
+| `fastfetch_install_method` | `auto` | `auto` (apt if available, else GitHub `.deb`), `apt`, or `github`. |
+| `fastfetch_github_version` | `latest` | Release for the github path; pin like `"2.53.0"` (no `v` prefix). |
+| `fastfetch_login_banner` | `true` | Manage `/etc/profile.d/fastfetch.sh`; `false` removes it. |
+| `fastfetch_login_zsh` | `true` | Also hook `/etc/zsh/zprofile` where zsh is present. |
+| `fastfetch_login_command` | `fastfetch` | Command the login hook runs (add flags/config here). |
+| `fastfetch_config` | `""` | Inline jsonc → `/etc/fastfetch/config.jsonc`; empty = unmanaged. |
+
 ---
 
 ## Service roles

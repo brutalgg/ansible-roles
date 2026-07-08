@@ -1,0 +1,22 @@
+---
+# fastfetch — install the fastfetch system-information tool and (optionally)
+# show it on interactive ssh logins. debian-family hosts.
+#
+# lifecycle: main.yml provisions (install once + optional system config +
+# login hooks); upgrades are out of band via tasks_from: update.yml.
+
+- name: import install tasks
+  ansible.builtin.import_tasks: install.yml
+  tags:
+    - fastfetch
+    - packages
+
+- name: import config tasks
+  ansible.builtin.import_tasks: config.yml
+  tags:
+    - fastfetch
+
+- name: import login banner tasks
+  ansible.builtin.import_tasks: login.yml
+  tags:
+    - fastfetch

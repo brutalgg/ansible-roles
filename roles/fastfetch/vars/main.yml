@@ -1,0 +1,5 @@
+---
+# role-private: maps ansible_architecture to the arch token in fastfetch's
+# release asset names (fastfetch-linux-<arch>.deb). unmapped architectures
+# (armv7l, riscv64, ...) already match the asset names and pass through.
+fastfetch__deb_arch: "{{ {'x86_64': 'amd64'}.get(ansible_facts['architecture'], ansible_facts['architecture']) }}"
