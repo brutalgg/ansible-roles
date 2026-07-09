@@ -74,13 +74,30 @@
         notifempty
       }
 
+- name: check whether backup source paths already exist
+  ansible.builtin.stat:
+    path: "{{ item.1 }}"
+  loop: "{{ autorestic_services | subelements('paths', skip_missing=true) }}"
+  loop_control:
+    label: "{{ item.0.name }}: {{ item.1 }}"
+  register: autorestic__source_paths
+
 - name: prime backup sources so hook-generated files exist before init
   # `autorestic check` validates that every location's `from` path exists, but some
   # sources (e.g. a pg_dump) are produced by a service's pre_commands hook at backup
-  # time. Run those hooks once here so a first-time init on a fresh host succeeds.
+  # time. Run those hooks for services with a missing source so a first-time init on
+  # a fresh host succeeds; once every path exists (steady state), nothing runs.
   ansible.builtin.command:
     cmd: "{{ item.1 }}"
-  loop: "{{ autorestic_services | subelements('pre_commands', skip_missing=true) }}"
+  vars:
+    autorestic__unprimed_services: >-
+      {{ autorestic__source_paths.results
+         | rejectattr('stat.exists')
+         | map(attribute='item.0.name')
+         | unique }}
+  loop: "{{ autorestic_services
+            | selectattr('name', 'in', autorestic__unprimed_services)
+            | subelements('pre_commands', skip_missing=true) }}"
   loop_control:
     label: "{{ item.0.name }}"
   changed_when: true
