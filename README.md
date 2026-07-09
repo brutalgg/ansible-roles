@@ -116,6 +116,7 @@ manages `daemon.json`, the data-root, the service, and docker-group membership.
 |---|---|---|
 | `docker_users` | `[]` | Users added to the `docker` group. |
 | `docker_data_folder` | `/var/lib/docker/` | |
+| `docker_data_folder_mode` | `0710` | Mode for the data-root dir. Matches the `0710` dockerd sets on startup, so the dir stays idempotent. |
 | `docker_apt_release_channel` | `stable` | |
 | `docker_packages` | docker-ce set | |
 | `docker_service_state` / `docker_service_enabled` | `started` / `true` | |

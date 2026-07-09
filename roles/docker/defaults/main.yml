@@ -10,6 +10,11 @@ docker_apt_repository: https://download.docker.com/linux/{{ ansible_facts["distr
 # Configure root folder for all docker data, i.e volumes, etc.
 docker_data_folder: /var/lib/docker/
 
+# Mode for the data-root directory. dockerd chmods its data-root to 0710 on
+# startup (blocks non-root traversal into container state), so provisioning must
+# create it 0710 to stay idempotent — 0755 drifts back to 0710 on every run.
+docker_data_folder_mode: "0710"
+
 # Extra daemon.json options merged over {"data-root": docker_data_folder}.
 # e.g. registry-mirrors / insecure-registries (internal registry), log-driver,
 # default-address-pools (avoid VLAN subnet clashes). a key here overrides data-root.

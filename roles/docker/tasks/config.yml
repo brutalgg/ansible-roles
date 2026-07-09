@@ -17,7 +17,7 @@
     state: directory
     owner: root
     group: root
-    mode: "0755"
+    mode: "{{ docker_data_folder_mode }}"
 
 - name: ensure docker daemon configuration exists
   ansible.builtin.template:
