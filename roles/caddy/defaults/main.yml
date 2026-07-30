@@ -1,0 +1,58 @@
+---
+caddy_enabled: false
+caddy_user: caddy
+caddy_group: caddy
+caddy_binary_path: /usr/bin/caddy
+caddy_env_file: /etc/caddy/caddy.env
+# dir caddy writes operator-supplied per-site cert/key material into (see the
+# tls_cert/tls_key per-site keys under caddy_sites).
+caddy_ssl_dir: /etc/caddy/ssl
+# default acme ca: false = let's encrypt production, true = le staging. a site
+# may override just itself with tls_staging in its caddy_sites entry.
+caddy_le_staging: false
+# acme ca directory urls. point at a private acme (e.g. step-ca) for an internal pki.
+caddy_acme_ca_url: https://acme-v02.api.letsencrypt.org/directory
+caddy_acme_ca_staging_url: https://acme-staging-v02.api.letsencrypt.org/directory
+# dns resolvers caddy uses for the acme dns-01 challenge.
+caddy_resolvers:
+  - 1.1.1.1
+  - 1.0.0.1
+
+# --- ACME DNS-01 challenge ---
+# master switch. true: caddy is BUILT with the dns plugin(s) below and sites use
+# dns-01 to obtain certs (required for wildcards / internal-only domains). false:
+# plain caddy is built and sites fall back to http-01 (or per-site tls_internal).
+caddy_dns_challenge_enabled: true
+# xcaddy dns provider module(s) compiled into the binary. list more than one to
+# build a binary that supports several providers, e.g.:
+#   - github.com/caddy-dns/cloudflare
+#   - github.com/caddy-dns/godaddy
+caddy_dns_plugins:
+  - github.com/caddy-dns/cloudflare
+# the active provider used in the Caddyfile tls block — must be one of the plugins
+# built above — plus the env var its token is read from and the token value.
+#   cloudflare -> provider: cloudflare, token env: CLOUDFLARE_API_TOKEN
+#   godaddy    -> provider: godaddy,    token env: GODADDY_API_TOKEN
+caddy_dns_provider: cloudflare
+caddy_dns_token_env: CLOUDFLARE_API_TOKEN
+# the provider api token — supplied from the control repo (kept out of this
+# role's namespace, like other secrets).
+caddy_dns_token: ""
+
+# --- xcaddy build toolchain sources (override for an internal apt mirror) ---
+caddy_xcaddy_gpg_url: https://dl.cloudsmith.io/public/caddy/xcaddy/gpg.key
+caddy_xcaddy_repo_url: https://dl.cloudsmith.io/public/caddy/xcaddy/debian.deb.txt
+# reverse-proxy sites. caddy owns this interface; a consuming service maps its
+# own vars in from its group_vars rather than caddy reaching into the service
+# (see docs/STANDARDS.md §2.3). per-entry schema:
+#   name:         label; names the per-site access log (/var/log/caddy/<name>-access.log)
+#   domains:      list of public hostnames caddy serves and obtains certs for
+#   upstream:     host:port caddy reverse-proxies to
+#   tls_staging:  optional bool — use le staging for this site only (default caddy_le_staging)
+#   tls_internal: optional bool — use caddy's internal ca instead of public le (default false)
+#   tls_cert:     optional PEM — operator-supplied public cert (e.g. signed by an
+#                 internal ca). when set, caddy uses this static cert/key pair for
+#                 the site instead of acme, and tls_key must be set too.
+#   tls_key:      optional PEM — the private key for tls_cert (wire from vault).
+# precedence when more than one is set: tls_cert > tls_internal > acme.
+caddy_sites: []

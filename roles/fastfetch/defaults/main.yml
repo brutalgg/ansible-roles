@@ -1,0 +1,39 @@
+---
+# how fastfetch gets installed:
+#   auto   — distro package when apt carries one (Debian 13+, Ubuntu 24.10+,
+#            or a backport the host has enabled), otherwise a .deb from GitHub
+#            releases (Debian 12 / Ubuntu 24.04 and older ship no package).
+#   apt    — distro package only; fails on a distro without one.
+#   github — GitHub releases .deb only.
+fastfetch_install_method: auto
+
+# release to install when the github path is used. "latest" resolves the newest
+# release at install time (fastfetch tags are bare versions, no "v" prefix —
+# pin like "2.53.0"). provisioning never upgrades an installed fastfetch; the
+# deliberate upgrade lives in update.yml (tasks_from, out of band).
+fastfetch_github_version: latest
+
+# show fastfetch on interactive ssh logins via /etc/profile.d/fastfetch.sh.
+# profile.d is sourced by bash/sh login shells and — unlike motd — is not
+# silenced by ~/.hushlogin (which the accounts role creates on request).
+# non-interactive sessions (scp/sftp/rsync/ansible) and local console logins
+# stay quiet. false removes the managed files.
+fastfetch_login_banner: true
+
+# zsh login shells never read /etc/profile.d, so also source the banner snippet
+# from a managed block in /etc/zsh/zprofile. applied only where zsh is present
+# (no-op otherwise; a host that gains zsh later picks it up on the next run).
+# false removes the block.
+fastfetch_login_zsh: true
+
+# command the login hook runs — override to pass flags or a specific preset,
+# e.g. "fastfetch --config /etc/fastfetch/banner.jsonc".
+fastfetch_login_command: fastfetch
+
+# optional system-wide configuration, written verbatim (jsonc) to
+# /etc/fastfetch/config.jsonc — fastfetch's system-wide search path; a user's
+# ~/.config/fastfetch/config.jsonc still wins. empty = leave unmanaged.
+fastfetch_config: ""
+
+# the github path also honors the shared github_api_user / github_api_pass /
+# github_api_auth globals (unauthenticated when unset) for the release lookup.

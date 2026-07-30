@@ -1,0 +1,16 @@
+---
+# Extra packages to install on every host (callers append their own list).
+base_extra_packages: []
+# Server timezone. Neutral default — set the environment's zone in the control repo.
+base_timezone: UTC
+
+# apt mirrors — point these at an internal mirror/caching proxy for a
+# network-isolated environment that cannot reach the public Debian mirrors.
+base_apt_mirror: http://deb.debian.org/debian
+base_apt_security_mirror: http://security.debian.org/debian-security
+base_apt_dietpi_mirror: https://dietpi.com/apt
+
+# sshd hardening (applied only when sshd is present). defaults stay hardened;
+# a bootstrap/console-less host can relax them via group_vars.
+base_ssh_password_authentication: false
+base_ssh_permit_root_login: "no"   # no | yes | prohibit-password

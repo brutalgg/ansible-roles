@@ -1,0 +1,41 @@
+---
+# create the managed login accounts, install their authorized keys, and drop
+# .hushlogin for the ones that ask for it.
+- name: ensure user accounts exist
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    shell: "{{ item.shell | default(accounts_default_shell) }}"
+    groups: "{{ [accounts_admin_group] if (item.sudo | default(false)) else omit }}"
+    append: true
+    state: present
+  loop: "{{ accounts_users }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+  # explicit path (rather than a ~user lookup) keeps this safe under --check on
+  # a bare host: the user task has not really created the account yet, and the
+  # module otherwise errors resolving the home dir. manage_dir creates/owns the
+  # standard ~/.ssh for us.
+- name: ensure authorized ssh keys
+  ansible.posix.authorized_key:
+    user: "{{ item.0.name }}"
+    key: "{{ item.1 }}"
+    path: "/home/{{ item.0.name }}/.ssh/authorized_keys"
+    manage_dir: true
+    state: present
+  loop: "{{ accounts_users | subelements('ssh_keys', skip_missing=true) }}"
+  loop_control:
+    label: "{{ item.0.name }}"
+
+- name: suppress login banner for selected users
+  ansible.builtin.file:
+    path: "/home/{{ item.name }}/.hushlogin"
+    state: touch
+    owner: "{{ item.name }}"
+    group: "{{ item.name }}"
+    mode: "0644"
+    modification_time: preserve
+    access_time: preserve
+  loop: "{{ accounts_users | selectattr('hushlogin', 'defined') | selectattr('hushlogin') | list }}"
+  loop_control:
+    label: "{{ item.name }}"

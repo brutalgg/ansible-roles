@@ -1,0 +1,15 @@
+---
+- name: install openvpn and easy-rsa
+  ansible.builtin.import_tasks: install.yml
+
+- name: build the pki and server certificate
+  ansible.builtin.import_tasks: pki.yml
+
+- name: issue and revoke client certificates
+  ansible.builtin.import_tasks: clients.yml
+
+- name: configure the openvpn server
+  ansible.builtin.import_tasks: config.yml
+
+- name: render and fetch client profiles
+  ansible.builtin.import_tasks: profiles.yml

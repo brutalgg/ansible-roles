@@ -1,0 +1,24 @@
+---
+- name: render and fetch client profiles
+  when:
+    - openvpn_sync_certs | bool
+    - openvpn_clients | length > 0
+    - not ansible_check_mode or openvpn__bin.stat.exists
+  block:
+    - name: read the ca certificate
+      ansible.builtin.slurp:
+        src: "{{ openvpn_easyrsa_dir }}/pki/ca.crt"
+      register: openvpn__ca
+
+    - name: read the tls-auth key
+      ansible.builtin.slurp:
+        src: "{{ openvpn_dir }}/ta.key"
+      register: openvpn__ta
+      when: openvpn_tls_auth | bool
+      no_log: true
+
+    - name: build each client profile
+      ansible.builtin.include_tasks: profile.yml
+      loop: "{{ openvpn_clients }}"
+      loop_control:
+        loop_var: openvpn__client

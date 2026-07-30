@@ -1,0 +1,47 @@
+---
+# wireguard — wg-quick mesh between the play's hosts. every host in the play
+# peers with every other play host; hosts outside ansible join via
+# wireguard_unmanaged_peers.
+
+# --- core -------------------------------------------------------------------
+wireguard_remote_directory: "/etc/wireguard"   # where <interface>.conf lives
+wireguard_interface: "wg0"                     # interface name / conf basename
+wireguard_port: "51820"                        # ListenPort (udp)
+wireguard_service_enabled: true                # enable the wg-quick@<interface> unit
+wireguard_service_state: started               # started | stopped
+
+# private key. "" = generate one on the first run, then keep whatever key the
+# deployed conf already carries on later runs. set from vault to pin a known key.
+wireguard_private_key: ""
+
+# interface addresses in cidr form, e.g. ["10.8.0.1/24"]. REQUIRED — one per
+# host, unique within the mesh subnet; set in host_vars.
+wireguard_addresses: []
+
+# --- interface knobs (emitted only when non-empty / enabled) -----------------
+wireguard_dns: ""              # DNS =
+wireguard_mtu: ""              # MTU =
+wireguard_fwmark: ""           # FwMark =
+wireguard_table: ""            # Table =
+wireguard_save_config: false   # SaveConfig = true (wg-quick persists runtime edits)
+wireguard_preup: []            # PreUp lines, emitted in order
+wireguard_postup: []           # PostUp lines, emitted in order
+wireguard_predown: []          # PreDown lines, emitted in order
+wireguard_postdown: []         # PostDown lines, emitted in order
+
+# --- how the other play hosts reach this host (read via hostvars) ------------
+# where peers connect to this host. default: the inventory hostname. "" marks a
+# client-only host — its peers get no Endpoint line, so it can dial out but not
+# be dialed.
+wireguard_endpoint: "{{ inventory_hostname }}"
+# AllowedIPs the peers record for this host. "" = derive host routes from
+# wireguard_addresses (/32 per ipv4 address, /128 per ipv6).
+wireguard_allowed_ips: ""
+# PersistentKeepalive the peers record for this host. 0 = omit the line.
+wireguard_persistent_keepalive: 0
+
+# --- peers outside the play ---------------------------------------------------
+# { <name>: { public_key, allowed_ips?, endpoint?, preshared_key?,
+#             persistent_keepalive? } }. endpoint is host:port. preshared_key is
+# secret material — wire it from vault.
+wireguard_unmanaged_peers: {}

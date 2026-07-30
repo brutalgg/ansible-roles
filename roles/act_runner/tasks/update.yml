@@ -1,0 +1,35 @@
+---
+# explicit upgrade path. NOT part of provisioning — run via
+# playbooks/update.yml --tags act_runner (see docs/STANDARDS.md §3.1). install.yml
+# only fetches the binary when absent; bumping act_runner_version and running this
+# file is the deliberate "upgrade to a newer release" function.
+- name: check if act runner binary exists
+  ansible.builtin.stat:
+    path: "{{ act_runner_binary }}"
+  register: act_runner__bin
+
+- name: check installed act runner version
+  ansible.builtin.command: "{{ act_runner_binary }} --version"
+  register: act_runner__installed_version
+  failed_when: false
+  changed_when: false
+  when: act_runner__bin.stat.exists
+
+- name: set installed act runner version fact
+  ansible.builtin.set_fact:
+    act_runner__current_version: "{{ act_runner__installed_version.stdout | regex_search('[0-9]+\\.[0-9]+\\.[0-9]+') }}"
+  when: act_runner__bin.stat.exists
+
+- name: determine if act runner upgrade is needed
+  ansible.builtin.set_fact:
+    act_runner__upgrade_needed: >-
+      {{ (not act_runner__bin.stat.exists)
+         or (act_runner__current_version != act_runner_version) }}
+
+- name: download act runner binary
+  ansible.builtin.get_url:
+    url: "{{ act_runner_download_url }}"
+    dest: "{{ act_runner_binary }}"
+    mode: "0755"
+  when: act_runner__upgrade_needed
+  notify: restart act runner

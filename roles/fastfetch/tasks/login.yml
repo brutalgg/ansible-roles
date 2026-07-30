@@ -1,0 +1,49 @@
+---
+# login banner. a profile.d snippet shows fastfetch on interactive ssh logins —
+# chosen over /etc/update-motd.d because pam_motd is silenced by ~/.hushlogin
+# (which the accounts role creates for users that ask), while profile.d always
+# runs for login shells. zsh never reads /etc/profile.d, so a managed block in
+# /etc/zsh/zprofile sources the same snippet where zsh is installed. both
+# toggles clean up after themselves when turned off.
+
+- name: manage the profile.d login banner
+  ansible.builtin.template:
+    src: fastfetch-login.sh.j2
+    dest: /etc/profile.d/fastfetch.sh
+    owner: root
+    group: root
+    mode: "0644"
+  when: fastfetch_login_banner | bool
+
+- name: remove the profile.d login banner
+  ansible.builtin.file:
+    path: /etc/profile.d/fastfetch.sh
+    state: absent
+  when: not fastfetch_login_banner | bool
+
+- name: check for a zsh zprofile
+  ansible.builtin.stat:
+    path: /etc/zsh/zprofile
+  register: fastfetch__zprofile
+
+- name: hook the banner into zsh login shells
+  ansible.builtin.blockinfile:
+    path: /etc/zsh/zprofile
+    marker: "# {mark} ansible managed: fastfetch login banner"
+    block: |
+      if [ -r /etc/profile.d/fastfetch.sh ]; then
+        . /etc/profile.d/fastfetch.sh
+      fi
+  when:
+    - fastfetch__zprofile.stat.exists
+    - fastfetch_login_banner | bool
+    - fastfetch_login_zsh | bool
+
+- name: remove the zsh login hook
+  ansible.builtin.blockinfile:
+    path: /etc/zsh/zprofile
+    marker: "# {mark} ansible managed: fastfetch login banner"
+    state: absent
+  when:
+    - fastfetch__zprofile.stat.exists
+    - not (fastfetch_login_banner | bool and fastfetch_login_zsh | bool)

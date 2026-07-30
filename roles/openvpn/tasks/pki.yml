@@ -1,0 +1,110 @@
+---
+- name: ensure the easy-rsa working directory exists
+  ansible.builtin.file:
+    path: "{{ openvpn_easyrsa_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+# init-pki would REMOVE an existing pki, so it is guarded by `creates`: it runs
+# once on a fresh host and is skipped forever after, which is what makes "reuse if
+# present, create if absent" hold.
+- name: initialise the easy-rsa pki
+  ansible.builtin.command:
+    cmd: /usr/share/easy-rsa/easyrsa init-pki
+    chdir: "{{ openvpn_easyrsa_dir }}"
+    creates: "{{ openvpn_easyrsa_dir }}/pki"
+  environment:
+    EASYRSA_BATCH: "1"
+  when: not ansible_check_mode or openvpn__bin.stat.exists
+
+- name: install a supplied ca certificate
+  ansible.builtin.copy:
+    content: "{{ openvpn_ca_cert_content }}"
+    dest: "{{ openvpn_easyrsa_dir }}/pki/ca.crt"
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - openvpn_ca_cert_content | length > 0
+    - not ansible_check_mode or openvpn__bin.stat.exists
+  no_log: true
+
+- name: install a supplied ca private key
+  ansible.builtin.copy:
+    content: "{{ openvpn_ca_key_content }}"
+    dest: "{{ openvpn_easyrsa_dir }}/pki/private/ca.key"
+    owner: root
+    group: root
+    mode: "0600"
+  when:
+    - openvpn_ca_key_content | length > 0
+    - not ansible_check_mode or openvpn__bin.stat.exists
+  no_log: true
+
+- name: build the certificate authority
+  ansible.builtin.command:
+    cmd: /usr/share/easy-rsa/easyrsa --batch build-ca nopass
+    chdir: "{{ openvpn_easyrsa_dir }}"
+    creates: "{{ openvpn_easyrsa_dir }}/pki/ca.crt"
+  environment:
+    EASYRSA_BATCH: "1"
+    EASYRSA_KEY_SIZE: "{{ openvpn_rsa_key_size }}"
+    EASYRSA_REQ_CN: "{{ openvpn_ca_common_name }}"
+  when: not ansible_check_mode or openvpn__bin.stat.exists
+
+- name: build the server certificate
+  ansible.builtin.command:
+    cmd: "/usr/share/easy-rsa/easyrsa --batch build-server-full {{ openvpn_instance }} nopass"
+    chdir: "{{ openvpn_easyrsa_dir }}"
+    creates: "{{ openvpn_easyrsa_dir }}/pki/issued/{{ openvpn_instance }}.crt"
+  environment:
+    EASYRSA_BATCH: "1"
+    EASYRSA_KEY_SIZE: "{{ openvpn_rsa_key_size }}"
+  when: not ansible_check_mode or openvpn__bin.stat.exists
+
+- name: install supplied dh parameters
+  ansible.builtin.copy:
+    content: "{{ openvpn_dh_params_content }}"
+    dest: "{{ openvpn_easyrsa_dir }}/pki/dh.pem"
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - openvpn_dh_params_content | length > 0
+    - not ansible_check_mode or openvpn__bin.stat.exists
+
+- name: generate dh parameters
+  ansible.builtin.command:
+    cmd: /usr/share/easy-rsa/easyrsa --batch gen-dh
+    chdir: "{{ openvpn_easyrsa_dir }}"
+    creates: "{{ openvpn_easyrsa_dir }}/pki/dh.pem"
+  environment:
+    EASYRSA_BATCH: "1"
+    EASYRSA_KEY_SIZE: "{{ openvpn_dh_key_size }}"
+  when:
+    - openvpn_dh_params_content | length == 0
+    - not ansible_check_mode or openvpn__bin.stat.exists
+
+- name: install a supplied tls-auth key
+  ansible.builtin.copy:
+    content: "{{ openvpn_tls_auth_key_content }}"
+    dest: "{{ openvpn_dir }}/ta.key"
+    owner: root
+    group: root
+    mode: "0600"
+  when:
+    - openvpn_tls_auth | bool
+    - openvpn_tls_auth_key_content | length > 0
+    - not ansible_check_mode or openvpn__bin.stat.exists
+  no_log: true
+
+- name: generate the tls-auth key
+  ansible.builtin.command:
+    cmd: "/usr/sbin/openvpn --genkey secret {{ openvpn_dir }}/ta.key"
+    creates: "{{ openvpn_dir }}/ta.key"
+  when:
+    - openvpn_tls_auth | bool
+    - openvpn_tls_auth_key_content | length == 0
+    - not ansible_check_mode or openvpn__bin.stat.exists

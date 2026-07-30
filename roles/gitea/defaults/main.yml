@@ -1,0 +1,143 @@
+---
+# gitea — self-hosted git host (gitea + its own postgres) as a docker-compose
+# stack. this role owns ONLY the gitea server and its backing database.
+#
+# DEFAULT MODE IS STANDALONE: out of the box gitea is reachable directly on the
+# host (optionally terminating its own tls, see gitea_tls_*), with no reverse
+# proxy and no ci runner assumed. put it behind the `caddy` role or add runners
+# with the `act_runner` role by wiring them together in a PLAYBOOK — the role
+# itself stays proxy-agnostic. it is a bootstrap "seed": nothing it needs is
+# deployed from gitea (only `docker`, a phase-1 role).
+
+# --- deployment location ---
+# host dir the compose project + rendered config live in. ansible-managed.
+# /etc/gitea is bind-mounted from "{{ gitea_deploy_dir }}/gitea" — deliberately
+# LOCAL host storage (never nfs): the rootless container must own + chmod it.
+gitea_deploy_dir: /opt/stacks/gitea
+
+# --- images / versions ---
+gitea_version: "1.26.2-rootless"
+gitea_image: "docker.gitea.com/gitea:{{ gitea_version }}"
+gitea_postgres_version: "18.4"
+gitea_postgres_image: "docker.io/library/postgres:{{ gitea_postgres_version }}"
+# uid:gid the rootless gitea container runs as; also owns the rendered config on
+# the host. NOTE gid may differ from uid (varies by deployment, e.g. 1026:100 or 1067:1067).
+gitea_uid: "1000"
+gitea_gid: "1000"
+# force a re-pull + recreate on deploy. false during provisioning so a deploy run
+# never silently upgrades the image; update.yml sets it true (docs/STANDARDS.md §2.1).
+gitea_force_pull: false
+
+# --- identity / urls ---
+gitea_app_name: "Gitea"
+# public hostname gitea is reached at. drives ROOT_URL/DOMAIN/SSH_DOMAIN.
+gitea_domain: "git.example.com"
+# gitea's own listen protocol. http, or https when it terminates tls itself
+# (gitea_tls_enabled). independent of any fronting proxy's scheme.
+gitea_protocol: "{{ 'https' if gitea_tls_enabled else 'http' }}"
+# external url advertised to clients. standalone default points at the published
+# port; behind a proxy, override this with the external https url (e.g.
+# "https://{{ gitea_domain }}/").
+gitea_root_url: "{{ gitea_protocol }}://{{ gitea_domain }}:{{ gitea_http_published_port }}/"
+gitea_ssh_domain: "{{ gitea_domain }}"
+
+# --- host port publishing ---
+# gitea listens on 3000 inside the container. standalone default binds all
+# interfaces so it's reachable on the lan; set to 127.0.0.1 when a same-host
+# proxy fronts it.
+gitea_http_bind: "0.0.0.0"
+gitea_http_published_port: "3000"
+# git-over-ssh. the rootless image runs an internal sshd on 2222.
+gitea_ssh_bind: "0.0.0.0"
+gitea_ssh_published_port: "2222"
+
+# --- native tls (standalone https, no proxy) ---
+# when true, gitea serves https directly on its http port using the supplied
+# cert/key (written under {{ gitea_deploy_dir }}/gitea/tls, bound at /etc/gitea/tls).
+# leave false when a proxy terminates tls.
+gitea_tls_enabled: false
+gitea_tls_cert: ""              # public cert PEM (operator-supplied)
+gitea_tls_key: ""               # private key PEM (wire from vault)
+
+# --- database (gitea's private postgres) ---
+gitea_db_name: gitea
+gitea_db_user: gitea
+# required — wire from vault in the consumer (e.g. "{{ gitea_vault_postgres_passwd }}").
+gitea_postgres_password: ""
+# where postgres stores its cluster INSIDE the container. postgres 18+ wants
+# /var/lib/postgresql (the cluster lives in a version subdir); postgres <=17 wants
+# /var/lib/postgresql/data. mounting one level too deep on 18 breaks startup.
+gitea_postgres_data_dir: /var/lib/postgresql
+
+# --- secrets (all required; wire from vault in the consumer) ---
+# generate the tokens with `gitea generate secret <NAME>` or `openssl rand -hex 32`.
+# gitea_secret_key encrypts data at rest — set once and keep stable.
+gitea_secret_key: ""
+gitea_internal_token: ""
+gitea_jwt_secret: ""
+gitea_lfs_jwt_secret: ""
+
+# --- server behaviour ---
+gitea_offline_mode: true
+gitea_lfs_enabled: true
+gitea_password_hash_algo: pbkdf2
+# proxies caddy/traefik trust for X-Forwarded-*. empty (standalone) = trust none;
+# behind a proxy set to "*" or the proxy's ip.
+gitea_reverse_proxy_trusted_proxies: ""
+
+# --- registration / visibility policy ---
+gitea_disable_registration: false
+gitea_require_signin_view: false
+gitea_register_manual_confirm: false
+gitea_enable_captcha: false
+gitea_default_keep_email_private: false
+gitea_default_allow_create_organization: true
+gitea_default_enable_timetracking: true
+gitea_default_user_visibility: public
+gitea_default_org_visibility: public
+gitea_no_reply_address: "noreply.localhost"
+# restrict sign-up to these email domains. empty list = no restriction.
+gitea_email_domain_allowlist: []
+
+# --- repository ---
+# force new repos private by default. empty = leave gitea's default (false).
+gitea_repository_default_private: ""
+
+# --- mailer (off by default) ---
+gitea_mailer_enabled: false
+gitea_mailer_host: ""
+gitea_mailer_port: "25"
+gitea_mailer_from: "Gitea <no-reply@{{ gitea_domain }}>"
+gitea_mailer_force_trust_server_cert: false
+
+# --- migrations ---
+gitea_migrations_allow_localnetworks: false
+# emitted only when non-empty:
+gitea_migrations_allowed_domains: ""
+gitea_migrations_skip_tls_verify: false
+
+# --- mirror intervals (emitted only when set) ---
+gitea_mirror_default_interval: ""
+gitea_mirror_min_interval: ""
+
+# --- storage / volumes ---
+# data (/var/lib/gitea): by default a docker-local named volume. either bind a
+# host path (gitea_data_bind) OR back the named volume with driver_opts (nfs);
+# don't set both. keep live data on storage the service uid can own — a
+# root-squashed nfs export can't be chown'd by the rootless container.
+gitea_data_bind: ""
+gitea_data_volume_opts: {}
+# postgres named volume driver_opts (optional nfs), same shape as above.
+gitea_postgres_volume_opts: {}
+# optional host dir bind-mounted at /backups (for `gitea dump` / pg_dump). empty = none.
+gitea_backups_bind: ""
+
+# --- escape hatch ---
+# arbitrary extra app.ini rendered AFTER everything above (later keys win). use
+# for any setting not exposed as a first-class var. shape: { section: { KEY: value } }.
+#   gitea_extra_config:
+#     ui:
+#       DEFAULT_THEME: gitea-dark
+#     "cron.archive_cleanup":
+#       ENABLED: true
+gitea_extra_config: {}

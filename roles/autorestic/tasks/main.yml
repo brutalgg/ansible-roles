@@ -1,0 +1,15 @@
+---
+- name: install restic
+  ansible.builtin.import_tasks: install_restic.yml
+
+- name: install autorestic
+  ansible.builtin.import_tasks: install_autorestic.yml
+
+- name: set up nfs mount
+  ansible.builtin.import_tasks: nfs.yml
+
+- name: configure autorestic and deploy scripts
+  ansible.builtin.import_tasks: configure.yml
+
+- name: set up systemd scheduling
+  ansible.builtin.import_tasks: systemd.yml

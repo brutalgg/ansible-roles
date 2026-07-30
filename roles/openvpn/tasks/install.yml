@@ -1,0 +1,21 @@
+---
+- name: assert an openvpn server hostname is set
+  ansible.builtin.assert:
+    that:
+      - openvpn_server_hostname | length > 0
+    fail_msg: "set openvpn_server_hostname to the address clients dial (public ip or dns name)."
+
+- name: install openvpn and easy-rsa
+  ansible.builtin.apt:
+    name: "{{ openvpn_packages }}"
+    state: present
+    update_cache: true
+
+# check-mode gate: on a bare host a dry run installs nothing, so easyrsa/openvpn
+# are absent and the pki + service tasks cannot work (CONVENTIONS.md check-mode
+# safety). every later task and handler is guarded on this fact.
+- name: detect the openvpn binary
+  ansible.builtin.stat:
+    path: /usr/sbin/openvpn
+  register: openvpn__bin
+  changed_when: false

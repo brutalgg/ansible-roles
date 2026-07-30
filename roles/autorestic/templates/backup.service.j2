@@ -1,0 +1,19 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Backup Docker volumes via autorestic
+After=network-online.target
+Wants=network-online.target
+{% if autorestic_nfs_managed %}
+RequiresMountsFor={{ autorestic_dest_dir }}
+{% endif %}
+
+[Service]
+Type=oneshot
+ExecStart={{ autorestic_config_dir }}/backup-wrapper.sh
+TimeoutStartSec=21600
+Nice=10
+IOSchedulingClass=idle
+Environment=AUTORESTIC_CONFIG={{ autorestic_config_dir }}/.autorestic.yml
+
+[Install]
+WantedBy=multi-user.target

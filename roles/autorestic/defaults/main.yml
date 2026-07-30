@@ -1,0 +1,62 @@
+---
+# --- install ---
+autorestic_install_directory: /usr/local/bin
+autorestic_install_path: "{{ autorestic_install_directory }}/autorestic"
+
+# set to true to fetch the latest release from GitHub, false to pin to autorestic_version
+autorestic_use_latest: true
+autorestic_version: 1.8.1
+autorestic_distro: linux_amd64
+autorestic_gh_url: https://github.com/cupcakearmy/autorestic/releases/download
+
+autorestic_download_directory: "/tmp/autorestic"
+
+# --- destination ---
+# the local directory restic writes repos into. restic uses a `local` backend,
+# so this is just a path — NFS, a Proxmox bind-mount, or plain local disk all work.
+# REQUIRED — no safe generic default; set per-host and assert it in preflight.
+autorestic_dest_dir: ""
+
+# Whether the role owns the per-host destination subdir (chown root:root, chmod 0750).
+# Set false when the destination is a root-squashed NFS export reached from an
+# UNPRIVILEGED LXC: the container's root is squashed to nobody and cannot chown/chmod,
+# so the role only ensures the directory exists and leaves ownership/mode to the server.
+autorestic_dest_manage_perms: true
+
+# Whether the role appends the hostname to the destination (repos at <dest>/<host>/<svc>).
+# Keep true when several hosts share one export and rely on the per-host segment to stay
+# separate. Set false when the destination is already scoped to this host (e.g. a
+# Proxmox bind-mount of <export>/<host>), so repos land at <dest>/<svc> without doubling.
+autorestic_dest_include_hostname: true
+
+# --- NFS ---
+# true  (VMs / bare-metal): the role installs nfs-common, manages fstab, and mounts
+#        autorestic_nfs_source at autorestic_dest_dir itself.
+# false (LXC): the container cannot mount NFS; autorestic_dest_dir is expected to
+#        already exist (e.g. a Proxmox bind-mount). The role only verifies it.
+autorestic_nfs_managed: true
+autorestic_nfs_source: ""
+autorestic_nfs_options: "defaults,noatime,soft,timeo=50,retrans=3"
+
+# --- backup ---
+autorestic_keep_daily: 7
+autorestic_keep_weekly: 4
+
+# systemd OnCalendar format
+autorestic_schedule: "*-*-* 03:00:00"
+autorestic_schedule_randomize: "30min"
+
+autorestic_log_dir: /var/log/backup
+autorestic_log_retention_days: 30
+
+# directory for autorestic config, wrapper script, and restore helper
+autorestic_config_dir: /opt/backup
+
+# restic repository encryption password
+autorestic_restic_password: ""
+
+# per-host list of services to back up (defined in host_vars)
+autorestic_services: []
+
+# optional Discord webhook URL for backup notifications
+# autorestic_discord_webhook_url: ""

@@ -1,0 +1,95 @@
+---
+# openvpn — a routed (tun) OpenVPN server with an easy-rsa PKI. the role issues a
+# CA, a server cert, and one cert per client, renders the server config, and (when
+# openvpn_sync_certs) writes inline .ovpn profiles and fetches them back to the
+# controller. PKI material is generated when absent and reused when already present
+# (on-disk from a prior run, or supplied via the *_content vars below) — so nothing
+# secret ships inside this shared role.
+
+# --- drop-in compatibility --------------------------------------------------
+# canonical list of client names to issue certs/profiles for. defaults to the
+# unprefixed `clients` var so playbooks written against the common
+# ansible-role-openvpn interface work unchanged; set openvpn_clients directly to
+# stay fully namespaced.
+openvpn_clients: "{{ clients | default([]) }}"
+
+# --- server identity --------------------------------------------------------
+# address clients dial (public ip or dns name) — baked into every .ovpn profile.
+openvpn_server_hostname: "{{ ansible_default_ipv4.address | default(ansible_fqdn) }}"
+openvpn_port: "1194"
+openvpn_proto: "udp"                 # udp | tcp
+openvpn_dev: "tun"                   # tun (routed) — tap (bridged) not managed here
+openvpn_instance: "server"           # config basename + openvpn-server@<instance> unit
+
+# --- paths ------------------------------------------------------------------
+openvpn_dir: "/etc/openvpn"
+openvpn_easyrsa_dir: "/etc/openvpn/easyrsa"
+openvpn_server_config_dir: "/etc/openvpn/server"
+openvpn_log_dir: "/var/log/openvpn"
+
+# --- vpn network ------------------------------------------------------------
+openvpn_server_network: "10.9.0.0"       # `server` directive network
+openvpn_server_netmask: "255.255.255.0"  # `server` directive netmask
+openvpn_server_subnet: "10.9.0.0/24"     # same range in cidr form, for the nat rule
+openvpn_redirect_gateway: true           # push a default route through the vpn
+openvpn_client_to_client: false          # let clients reach each other
+openvpn_max_clients: 100
+openvpn_keepalive: "10 120"
+
+# dns pushed to clients (only when openvpn_set_dns).
+openvpn_set_dns: true
+openvpn_dns_servers:
+  - "1.1.1.1"
+  - "1.0.0.1"
+# extra raw push directives, one per line (e.g. "route 10.0.0.0 255.255.255.0").
+openvpn_push: []
+
+# --- crypto -----------------------------------------------------------------
+openvpn_ca_common_name: "OpenVPN-CA"
+openvpn_rsa_key_size: "2048"         # ca / cert key size (EASYRSA_KEY_SIZE)
+openvpn_dh_key_size: "2048"          # dh param size
+openvpn_tls_auth: true               # add a tls-auth (ta.key) hmac firewall
+openvpn_cipher: "AES-256-GCM"        # data-channel cipher ("" omits the lines)
+openvpn_auth_digest: "SHA256"        # hmac digest ("" omits the line)
+openvpn_tls_version_min: "1.2"       # minimum tls version ("" omits the line)
+
+# compression. "" disables it (recommended — compression is a security risk);
+# set "lz4-v2" or "lzo" only if you must interoperate with old clients.
+openvpn_compression: ""
+
+# --- nat / forwarding -------------------------------------------------------
+# enable ipv4 forwarding (persistent) and a POSTROUTING MASQUERADE so clients
+# reach the internet. the masquerade rule is applied idempotently but is NOT
+# persisted across reboots here — pair with the firewall role / netfilter-persistent
+# if you need it to survive a reboot.
+openvpn_nat: true
+openvpn_nat_interface: "{{ ansible_default_ipv4.interface | default('eth0') }}"
+
+# --- service ----------------------------------------------------------------
+openvpn_service_enabled: true
+openvpn_service_state: "started"     # started | stopped
+
+# --- supplied pki material (optional) ---------------------------------------
+# provide any of these as inline PEM (e.g. from vault) to reuse an existing CA /
+# keys instead of generating them; "" = generate. supplying the CA cert AND key
+# lets the role keep issuing client certs under your own CA.
+openvpn_ca_cert_content: ""
+openvpn_ca_key_content: ""
+openvpn_tls_auth_key_content: ""
+openvpn_dh_params_content: ""
+
+# --- client profile fetch ---------------------------------------------------
+# write inline .ovpn profiles on the server and pull them back to the controller.
+openvpn_sync_certs: false
+openvpn_fetch_client_configs: true
+openvpn_fetch_client_configs_dir: "./fetched_client_configs"
+
+# --- revocation -------------------------------------------------------------
+# client names to revoke; the role revokes only certs still valid, regenerates
+# the CRL, and turns on crl-verify.
+openvpn_revoke_these_certs: []
+
+# --- packages ---------------------------------------------------------------
+openvpn_packages:
+  - openvpn
+  - easy-rsa

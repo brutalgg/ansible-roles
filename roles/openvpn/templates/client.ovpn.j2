@@ -1,0 +1,41 @@
+# {{ ansible_managed }}
+# openvpn client profile — {{ openvpn__client }}
+client
+dev {{ openvpn_dev }}
+proto {{ openvpn_proto }}
+remote {{ openvpn_server_hostname }} {{ openvpn_port }}
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+remote-cert-tls server
+{% if openvpn_cipher | length > 0 %}
+cipher {{ openvpn_cipher }}
+data-ciphers {{ openvpn_cipher }}
+{% endif %}
+{% if openvpn_auth_digest | length > 0 %}
+auth {{ openvpn_auth_digest }}
+{% endif %}
+{% if openvpn_tls_version_min | length > 0 %}
+tls-version-min {{ openvpn_tls_version_min }}
+{% endif %}
+{% if openvpn_compression | length > 0 %}
+compress {{ openvpn_compression }}
+{% endif %}
+verb 3
+
+<ca>
+{{ openvpn__ca.content | b64decode | trim }}
+</ca>
+<cert>
+{{ openvpn__client_cert.content | b64decode | trim }}
+</cert>
+<key>
+{{ openvpn__client_key.content | b64decode | trim }}
+</key>
+{% if openvpn_tls_auth %}
+key-direction 1
+<tls-auth>
+{{ openvpn__ta.content | b64decode | trim }}
+</tls-auth>
+{% endif %}

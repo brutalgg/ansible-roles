@@ -1,0 +1,19 @@
+---
+# root account handling, driven by accounts_root:
+#   ""      -> leave root untouched
+#   "lock"  -> lock the root password
+#   <hash>  -> set root's password to the supplied crypted hash (from vault)
+- name: lock root account
+  ansible.builtin.user:
+    name: root
+    password: "!"
+  when: accounts_root == "lock"
+
+- name: set root password
+  ansible.builtin.user:
+    name: root
+    password: "{{ accounts_root }}"
+  no_log: true
+  when:
+    - accounts_root | length > 0
+    - accounts_root != "lock"

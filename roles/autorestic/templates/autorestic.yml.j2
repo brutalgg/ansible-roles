@@ -1,0 +1,65 @@
+{{ ansible_managed | comment }}
+version: 2
+
+# Scheduling is owned entirely by the systemd backup.timer, which runs
+# `autorestic backup -a --ci` — so locations intentionally carry no `cron:` field.
+
+global:
+  forget:
+    keep-daily: {{ autorestic_keep_daily }}
+    keep-weekly: {{ autorestic_keep_weekly }}
+
+backends:
+{% for svc in autorestic_services %}
+  {{ svc.name }}:
+    type: local
+    path: {{ autorestic_dest_dir }}{{ ('/' ~ inventory_hostname) if autorestic_dest_include_hostname else '' }}/{{ svc.name }}
+    # Set the repo key explicitly. Without it autorestic generates a random key and
+    # rewrites this config to persist it — and that load→save round-trip corrupts the
+    # `forget` key (serialized as `forgetoption`) on releases <= 1.8.3. Same value as
+    # .restic-password, so `restore.sh` (restic --password-file) opens the repo too.
+    key: {{ autorestic_restic_password | to_json }}
+{% endfor %}
+
+locations:
+{% for svc in autorestic_services %}
+  {{ svc.name }}:
+    from:
+{% for vol in svc.volumes | default([]) %}
+      - /var/lib/docker/volumes/{{ vol }}/_data
+{% endfor %}
+{% for path in svc.paths | default([]) %}
+      - {{ path }}
+{% endfor %}
+    to:
+      - {{ svc.name }}
+    forget: prune
+{% set has_compose = svc.compose_path is defined %}
+{% set pre = svc.pre_commands | default([]) %}
+{% set post = svc.post_commands | default([]) %}
+{% if pre or post or has_compose %}
+    hooks:
+{% if pre or has_compose %}
+      before:
+{% for cmd in pre %}
+        - '{{ cmd | replace("'", "''") }}'
+{% endfor %}
+{% if has_compose %}
+        - '/usr/bin/docker compose -f {{ svc.compose_path }}/docker-compose.yml stop --timeout 120'
+{% endif %}
+{% endif %}
+{% if has_compose or post %}
+      after:
+{% if has_compose %}
+        - '/usr/bin/docker compose -f {{ svc.compose_path }}/docker-compose.yml start'
+{% endif %}
+{% for cmd in post %}
+        - '{{ cmd | replace("'", "''") }}'
+{% endfor %}
+{% endif %}
+{% if has_compose %}
+      failure:
+        - '/usr/bin/docker compose -f {{ svc.compose_path }}/docker-compose.yml start'
+{% endif %}
+{% endif %}
+{% endfor %}

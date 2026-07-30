@@ -1,0 +1,59 @@
+---
+act_runner_user: "act_runner"
+act_runner_home: "/var/lib/act_runner"
+act_runner_binary: "/usr/local/bin/act_runner"
+act_runner_config_directory: "/etc/act_runner"
+
+act_runner_gitea_instance_url: "https://gitea.example.com"
+act_runner_name: "{{ inventory_hostname }}"
+act_runner_token: ""  # REQUIRED — supply from the control repo's vault
+
+act_runner_version: "0.2.13"
+act_runner_arch: "amd64"
+act_runner_os: "linux"
+act_runner_download_url: >-
+  https://gitea.com/gitea/act_runner/releases/download/v{{ act_runner_version }}/act_runner-{{ act_runner_version }}-{{ act_runner_os }}-{{ act_runner_arch }}
+
+# execution backend: host (run jobs directly on the host) or container (run jobs
+# in docker). drives container.enabled in the rendered config and whether the
+# runner user joins the docker group.
+act_runner_config_type: container
+act_runner_container_enabled: "{{ act_runner_config_type == 'container' }}"
+
+# Logging
+act_runner_log_level: info
+
+# Runner
+act_runner_runner_file: "{{ act_runner_home }}/.runner"
+act_runner_capacity: 1
+act_runner_env_file: .env
+act_runner_timeout: 3h
+act_runner_shutdown_timeout: 0s
+act_runner_insecure: false
+act_runner_fetch_timeout: 5s
+act_runner_fetch_interval: 2s
+
+# Labels
+act_runner_labels: []
+
+# Cache
+act_runner_cache_enabled: true
+act_runner_cache_dir: ""
+act_runner_cache_host: 127.0.0.1
+act_runner_cache_port: 0
+act_runner_cache_external_server: ""
+
+# Container
+act_runner_container_network: ""
+act_runner_container_privileged: false
+act_runner_container_workdir_parent: ""
+act_runner_container_options: ""
+act_runner_container_valid_volumes: []
+act_runner_container_docker_host: ""
+act_runner_container_force_pull: true
+act_runner_container_force_rebuild: false
+act_runner_container_require_docker: true
+act_runner_container_docker_timeout: 30s
+
+# Host
+act_runner_host_workdir_parent: ""

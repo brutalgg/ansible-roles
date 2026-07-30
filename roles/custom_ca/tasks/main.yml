@@ -1,0 +1,45 @@
+---
+# install a custom CA certificate into the system trust store so the host trusts
+# TLS signed by that CA. the certificate itself is ENVIRONMENT-SPECIFIC and lives
+# in the control repo — this role only installs whatever cert the control repo
+# points it at. provide the cert either as inline PEM (`custom_ca_cert_content`,
+# e.g. from a hoisted CA global) or as a file path (`custom_ca_cert_src`); content
+# wins when both are set.
+#
+# the whole role is gated on custom_ca_enabled: hosts that should not trust the CA
+# set it false in group_vars and the role no-ops (no assert, no cert install).
+- name: manage the custom ca certificate
+  when: custom_ca_enabled | bool
+  block:
+    - name: assert a custom ca certificate is provided
+      ansible.builtin.assert:
+        that:
+          - (custom_ca_cert_content | length > 0) or (custom_ca_cert_src | length > 0)
+        fail_msg: >-
+          set custom_ca_cert_content (inline PEM) or custom_ca_cert_src (a path) to
+          this environment's CA certificate. The cert lives in the control repo, not
+          in this shared role.
+
+    - name: ensure custom ca certificate is installed (from content)
+      ansible.builtin.copy:
+        content: "{{ custom_ca_cert_content }}"
+        dest: "/usr/local/share/ca-certificates/{{ custom_ca_cert_name }}"
+        owner: root
+        group: root
+        mode: '0644'
+      when: custom_ca_cert_content | length > 0
+      notify:
+        - update-ca-certificates
+
+    - name: ensure custom ca certificate is installed (from file)
+      ansible.builtin.copy:
+        src: "{{ custom_ca_cert_src }}"
+        dest: "/usr/local/share/ca-certificates/{{ custom_ca_cert_name }}"
+        owner: root
+        group: root
+        mode: '0644'
+      when:
+        - custom_ca_cert_content | length == 0
+        - custom_ca_cert_src | length > 0
+      notify:
+        - update-ca-certificates

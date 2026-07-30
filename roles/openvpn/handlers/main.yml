@@ -1,0 +1,6 @@
+---
+- name: restart openvpn
+  ansible.builtin.systemd:
+    name: "openvpn-server@{{ openvpn_instance }}"
+    state: restarted
+  when: not ansible_check_mode or openvpn__bin.stat.exists

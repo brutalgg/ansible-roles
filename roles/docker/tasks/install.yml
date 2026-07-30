@@ -1,0 +1,89 @@
+---
+# bring the docker engine into existence: drop any distro docker packages, add
+# docker's apt repository + signing key, refresh the cache, and install the
+# pinned package set. provisioning installs only (state: present) — docker is an
+# apt package and rides the os-wide upgrade cadence (playbooks/update.yml), so
+# there is no separate update.yml. see defaults/main.yml and docs/STANDARDS.md §3.1.
+- name: detect existing docker engine
+  ansible.builtin.stat:
+    path: /usr/bin/dockerd
+  register: docker__engine
+  changed_when: false
+
+- name: ensure old docker packages are absent
+  ansible.builtin.package:
+    name:
+      - docker
+      - docker-engine
+      - docker-compose
+      - docker.io
+      - docker-doc
+      - podman-docker
+    state: absent
+
+- name: ensure dependencies are present
+  ansible.builtin.package:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - gnupg2
+    state: present
+
+- name: ensure keyring directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# the steps below add docker's apt repo and install from it. under --check on a
+# host that does not yet have docker, the repo is never actually added, so the
+# package manager cannot resolve the docker packages and the play would abort.
+# gate the repo-dependent steps so a dry run on a bare host skips them cleanly;
+# real runs (ansible_check_mode is false) and check runs on a host that already
+# has docker are unaffected.
+- name: install docker from its apt repository
+  when: not ansible_check_mode or docker__engine.stat.exists
+  block:
+    - name: ensure docker gpg key
+      ansible.builtin.get_url:
+        url: "{{ docker_apt_gpg_url }}"
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+        force: true
+        timeout: 30
+      register: docker__gpg_key
+      failed_when:
+        - docker__gpg_key.failed
+        - not docker_apt_ignore_key_error
+      until: docker__gpg_key is succeeded
+      retries: 3
+      delay: 5
+
+    - name: ensure apt repository sources
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/docker.sources
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # This file is managed by Ansible. DO NOT EDIT MANUALLY.
+          Types: deb
+          URIs: {{ docker_apt_repository }}
+          Suites: {{ ansible_facts["distribution_release"] }}
+          Components: {{ docker_apt_release_channel }}
+          Signed-By: /etc/apt/keyrings/docker.asc
+
+    # refresh the cache so the newly-added docker repo is visible before install.
+    # manager-specific (cache control) per docs/STANDARDS.md §3.2; the install below
+    # uses the generic package module.
+    - name: update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: ensure packages are {{ docker_packages_state }}
+      ansible.builtin.package:
+        name: "{{ docker_packages }}"
+        state: "{{ docker_packages_state }}"
+      notify: restart docker

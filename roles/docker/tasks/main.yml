@@ -1,0 +1,6 @@
+---
+- name: install docker engine
+  ansible.builtin.import_tasks: install.yml
+
+- name: configure docker engine
+  ansible.builtin.import_tasks: config.yml

@@ -1,0 +1,20 @@
+# macOS
+.DS_Store
+
+# Ansible
+*.retry
+.decrypted~
+*.vault_password
+.vault_password
+
+# Editors
+.vscode/settings.json
+.idea/
+
+# Molecule / test artifacts (CI-ready, not used yet)
+.molecule/
+.cache/
+__pycache__/
+
+# ansible-lint / runtime cache
+.ansible/

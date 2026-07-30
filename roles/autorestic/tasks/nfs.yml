@@ -1,0 +1,51 @@
+---
+- name: install nfs client
+  ansible.builtin.apt:
+    name: nfs-common
+    state: present
+  when: autorestic_nfs_managed
+
+- name: create backup destination directory
+  ansible.builtin.file:
+    path: "{{ autorestic_dest_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: autorestic_nfs_managed
+
+- name: add nfs entry to fstab
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: ".*{{ autorestic_dest_dir }}.*"
+    line: "{{ autorestic_nfs_source }} {{ autorestic_dest_dir }} nfs {{ autorestic_nfs_options }} 0 0"
+    state: present
+  when: autorestic_nfs_managed and autorestic_nfs_source | length > 0
+
+- name: mount nfs share
+  ansible.posix.mount:
+    path: "{{ autorestic_dest_dir }}"
+    src: "{{ autorestic_nfs_source }}"
+    fstype: nfs
+    opts: "{{ autorestic_nfs_options }}"
+    state: mounted
+  when: autorestic_nfs_managed and autorestic_nfs_source | length > 0
+
+- name: verify pre-mounted backup path exists
+  ansible.builtin.stat:
+    path: "{{ autorestic_dest_dir }}"
+  register: autorestic__dest_check
+  when: not autorestic_nfs_managed
+
+- name: fail if pre-mounted backup path is missing
+  ansible.builtin.fail:
+    msg: "autorestic_dest_dir ({{ autorestic_dest_dir }}) does not exist. Ensure Proxmox has the backup share bind-mounted into this LXC."
+  when: not autorestic_nfs_managed and not autorestic__dest_check.stat.exists
+
+- name: create host backup directory on destination
+  ansible.builtin.file:
+    path: "{{ (autorestic_dest_dir ~ '/' ~ inventory_hostname) if autorestic_dest_include_hostname else autorestic_dest_dir }}"
+    state: directory
+    owner: "{{ autorestic_dest_manage_perms | ternary('root', omit) }}"
+    group: "{{ autorestic_dest_manage_perms | ternary('root', omit) }}"
+    mode: "{{ autorestic_dest_manage_perms | ternary('0750', omit) }}"

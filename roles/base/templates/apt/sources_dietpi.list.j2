@@ -1,0 +1,8 @@
+# {{ ansible_managed }}
+deb {{ base_apt_dietpi_mirror }} {{ ansible_facts['distribution_release'] }} main
+deb {{ base_apt_dietpi_mirror }} all rpi
+
+# debian archive — general packages that the dietpi/rpi repos don't carry
+deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] {{ base_apt_mirror }} {{ ansible_facts['distribution_release'] }} main contrib
+deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] {{ base_apt_mirror }} {{ ansible_facts['distribution_release'] }}-updates main contrib
+deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] {{ base_apt_security_mirror }} {{ ansible_facts['distribution_release'] }}-security main contrib

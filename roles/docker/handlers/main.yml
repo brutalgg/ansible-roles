@@ -1,0 +1,13 @@
+---
+- name: restart docker
+  ansible.builtin.service:
+    name: docker
+    state: restarted
+  # handlers run under --check too; skip on a host without docker, where the
+  # service unit does not exist yet and restarting would error. docker__engine
+  # is registered in tasks/install.yml (always imported before config). real
+  # runs restart normally.
+  when: not ansible_check_mode or docker__engine.stat.exists
+
+- name: flush user permissions
+  ansible.builtin.meta: reset_connection

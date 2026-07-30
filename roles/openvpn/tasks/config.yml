@@ -1,0 +1,52 @@
+---
+- name: create the server config directory
+  ansible.builtin.file:
+    path: "{{ openvpn_server_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# owned by nobody:nogroup so the daemon can still write status.log / ipp.txt after
+# it drops privileges at runtime.
+- name: create the openvpn log directory
+  ansible.builtin.file:
+    path: "{{ openvpn_log_dir }}"
+    state: directory
+    owner: nobody
+    group: nogroup
+    mode: "0750"
+
+- name: enable ipv4 forwarding
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    sysctl_set: true
+    state: present
+    reload: true
+
+- name: configure nat masquerade for vpn clients
+  ansible.builtin.iptables:
+    table: nat
+    chain: POSTROUTING
+    source: "{{ openvpn_server_subnet }}"
+    out_interface: "{{ openvpn_nat_interface }}"
+    jump: MASQUERADE
+    comment: "openvpn client nat"
+  when: openvpn_nat | bool
+
+- name: render the server configuration
+  ansible.builtin.template:
+    src: server.conf.j2
+    dest: "{{ openvpn_server_config_dir }}/{{ openvpn_instance }}.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart openvpn
+
+- name: manage the openvpn server service
+  ansible.builtin.systemd:
+    name: "openvpn-server@{{ openvpn_instance }}"
+    enabled: "{{ openvpn_service_enabled }}"
+    state: "{{ openvpn_service_state }}"
+  when: not ansible_check_mode or openvpn__bin.stat.exists

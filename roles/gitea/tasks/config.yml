@@ -1,0 +1,82 @@
+---
+- name: ensure gitea deploy dir exists
+  ansible.builtin.file:
+    path: "{{ gitea_deploy_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: mark deploy dir as ansible managed
+  ansible.builtin.copy:
+    dest: "{{ gitea_deploy_dir }}/.ansible-managed"
+    content: |
+      This directory is managed by Ansible (gitea role).
+      Manual changes may be overwritten.
+    mode: "0644"
+
+# when data lives on a host bind (not a named volume), the rootless container
+# must own it before first start or the setup step fails "not writable". create
+# it here so a fresh host works without a manual chown.
+- name: ensure gitea data bind dir exists and is owned by the service user
+  ansible.builtin.file:
+    path: "{{ gitea_data_bind }}"
+    state: directory
+    owner: "{{ gitea_uid }}"
+    group: "{{ gitea_gid }}"
+    mode: "0750"
+  when: gitea_data_bind | length > 0
+
+- name: ensure gitea config dir exists
+  ansible.builtin.file:
+    path: "{{ gitea_deploy_dir }}/gitea"
+    state: directory
+    owner: "{{ gitea_uid }}"
+    group: "{{ gitea_gid }}"
+    mode: "0700"
+
+- name: deploy native tls material
+  when: gitea_tls_enabled
+  block:
+    - name: ensure gitea tls dir exists
+      ansible.builtin.file:
+        path: "{{ gitea_deploy_dir }}/gitea/tls"
+        state: directory
+        owner: "{{ gitea_uid }}"
+        group: "{{ gitea_gid }}"
+        mode: "0700"
+
+    - name: deploy gitea tls cert
+      ansible.builtin.copy:
+        content: "{{ gitea_tls_cert }}"
+        dest: "{{ gitea_deploy_dir }}/gitea/tls/cert.pem"
+        owner: "{{ gitea_uid }}"
+        group: "{{ gitea_gid }}"
+        mode: "0444"
+      notify: restart gitea
+
+    - name: deploy gitea tls key
+      ansible.builtin.copy:
+        content: "{{ gitea_tls_key }}"
+        dest: "{{ gitea_deploy_dir }}/gitea/tls/key.pem"
+        owner: "{{ gitea_uid }}"
+        group: "{{ gitea_gid }}"
+        mode: "0400"
+      no_log: true
+      notify: restart gitea
+
+- name: render gitea app.ini
+  ansible.builtin.template:
+    src: app.ini.j2
+    dest: "{{ gitea_deploy_dir }}/gitea/app.ini"
+    owner: "{{ gitea_uid }}"
+    group: "{{ gitea_gid }}"
+    mode: "0400"
+  no_log: true
+  notify: restart gitea
+
+- name: render gitea compose file
+  ansible.builtin.template:
+    src: compose.yaml.j2
+    dest: "{{ gitea_deploy_dir }}/compose.yaml"
+    mode: "0640"
+  no_log: true
+  notify: restart gitea stack

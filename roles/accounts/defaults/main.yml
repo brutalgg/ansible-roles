@@ -1,0 +1,22 @@
+---
+# Unified account model. A "single primary user" is just a list of length 1.
+#
+# Each entry in accounts_users:
+#   name:      (required) the username
+#   shell:     login shell                     (default: accounts_default_shell)
+#   sudo:      member of the passwordless-sudo admin group (default: false)
+#   ssh_keys:  list of authorized public keys  (default: [])
+#   hushlogin: drop ~/.hushlogin to silence the login banner (default: false)
+accounts_users: []
+
+# shell applied when an entry omits `shell`.
+accounts_default_shell: /bin/bash
+
+# group granted passwordless sudo. created only when at least one user has sudo.
+accounts_admin_group: admin
+
+# root account handling:
+#   ""      -> leave root untouched (default)
+#   "lock"  -> lock the root password ("!")
+#   <hash>  -> set root's password to this crypted hash (supply from vault)
+accounts_root: ""

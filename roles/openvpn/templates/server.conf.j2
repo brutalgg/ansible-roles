@@ -1,0 +1,59 @@
+# {{ ansible_managed }}
+# openvpn server — {{ openvpn_instance }}
+port {{ openvpn_port }}
+proto {{ openvpn_proto }}
+dev {{ openvpn_dev }}
+
+ca {{ openvpn_easyrsa_dir }}/pki/ca.crt
+cert {{ openvpn_easyrsa_dir }}/pki/issued/{{ openvpn_instance }}.crt
+key {{ openvpn_easyrsa_dir }}/pki/private/{{ openvpn_instance }}.key
+dh {{ openvpn_easyrsa_dir }}/pki/dh.pem
+{% if openvpn_tls_auth %}
+tls-auth {{ openvpn_dir }}/ta.key 0
+{% endif %}
+{% if openvpn_revoke_these_certs | length > 0 %}
+crl-verify {{ openvpn_dir }}/crl.pem
+{% endif %}
+
+topology subnet
+server {{ openvpn_server_network }} {{ openvpn_server_netmask }}
+ifconfig-pool-persist {{ openvpn_log_dir }}/ipp.txt
+{% if openvpn_redirect_gateway %}
+push "redirect-gateway def1 bypass-dhcp"
+{% endif %}
+{% if openvpn_set_dns %}
+{% for dns in openvpn_dns_servers %}
+push "dhcp-option DNS {{ dns }}"
+{% endfor %}
+{% endif %}
+{% for line in openvpn_push %}
+push "{{ line }}"
+{% endfor %}
+{% if openvpn_client_to_client %}
+client-to-client
+{% endif %}
+keepalive {{ openvpn_keepalive }}
+{% if openvpn_compression | length > 0 %}
+compress {{ openvpn_compression }}
+push "compress {{ openvpn_compression }}"
+{% endif %}
+max-clients {{ openvpn_max_clients }}
+user nobody
+group nogroup
+persist-key
+persist-tun
+{% if openvpn_cipher | length > 0 %}
+cipher {{ openvpn_cipher }}
+data-ciphers {{ openvpn_cipher }}
+{% endif %}
+{% if openvpn_auth_digest | length > 0 %}
+auth {{ openvpn_auth_digest }}
+{% endif %}
+{% if openvpn_tls_version_min | length > 0 %}
+tls-version-min {{ openvpn_tls_version_min }}
+{% endif %}
+{% if openvpn_proto.startswith('udp') %}
+explicit-exit-notify 1
+{% endif %}
+status {{ openvpn_log_dir }}/status.log
+verb 3

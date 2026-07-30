@@ -1,0 +1,79 @@
+# {{ ansible_managed }}
+# {{ inventory_hostname }} — {{ wireguard_interface }}
+
+[Interface]
+{% for address in wireguard_addresses %}
+Address = {{ address }}
+{% endfor %}
+PrivateKey = {{ wireguard_private_key }}
+ListenPort = {{ wireguard_port }}
+{% if wireguard_dns | length > 0 %}
+DNS = {{ wireguard_dns }}
+{% endif %}
+{% if wireguard_mtu | string | length > 0 %}
+MTU = {{ wireguard_mtu }}
+{% endif %}
+{% if wireguard_fwmark | string | length > 0 %}
+FwMark = {{ wireguard_fwmark }}
+{% endif %}
+{% if wireguard_table | string | length > 0 %}
+Table = {{ wireguard_table }}
+{% endif %}
+{% if wireguard_save_config %}
+SaveConfig = true
+{% endif %}
+{% for line in wireguard_preup %}
+PreUp = {{ line }}
+{% endfor %}
+{% for line in wireguard_postup %}
+PostUp = {{ line }}
+{% endfor %}
+{% for line in wireguard_predown %}
+PreDown = {{ line }}
+{% endfor %}
+{% for line in wireguard_postdown %}
+PostDown = {{ line }}
+{% endfor %}
+{# one peer per other play host. a host only publishes wireguard__public_key   #}
+{# once its key tasks have run, so a bare host in a dry run is skipped here.   #}
+{% for peer in ansible_play_hosts | reject('eq', inventory_hostname) %}
+{%   set pv = hostvars[peer] %}
+{%   if pv.wireguard__public_key is defined %}
+
+[Peer]
+# {{ peer }}
+PublicKey = {{ pv.wireguard__public_key }}
+{%     if pv.wireguard_allowed_ips | default('') | length > 0 %}
+AllowedIPs = {{ pv.wireguard_allowed_ips }}
+{%     else %}
+{%       for address in pv.wireguard_addresses | default([]) %}
+AllowedIPs = {{ address.split('/')[0] }}/{{ '128' if ':' in address else '32' }}
+{%       endfor %}
+{%     endif %}
+{%     set peer_endpoint = pv.wireguard_endpoint | default(peer) %}
+{%     if peer_endpoint | length > 0 %}
+Endpoint = {{ peer_endpoint }}:{{ pv.wireguard_port | default(wireguard_port) }}
+{%     endif %}
+{%     if pv.wireguard_persistent_keepalive | default(0) | int > 0 %}
+PersistentKeepalive = {{ pv.wireguard_persistent_keepalive }}
+{%     endif %}
+{%   endif %}
+{% endfor %}
+{% for name, peer in wireguard_unmanaged_peers.items() %}
+
+[Peer]
+# {{ name }} (unmanaged)
+PublicKey = {{ peer.public_key }}
+{%   if peer.preshared_key is defined %}
+PresharedKey = {{ peer.preshared_key }}
+{%   endif %}
+{%   if peer.allowed_ips is defined %}
+AllowedIPs = {{ peer.allowed_ips }}
+{%   endif %}
+{%   if peer.endpoint is defined %}
+Endpoint = {{ peer.endpoint }}
+{%   endif %}
+{%   if peer.persistent_keepalive is defined %}
+PersistentKeepalive = {{ peer.persistent_keepalive }}
+{%   endif %}
+{% endfor %}

@@ -1,0 +1,13 @@
+---
+# thin orchestrator: manage the passwordless-sudo group, the login accounts
+# (+ keys + hushlogin), then the root account. generalizes the single-user
+# and multi-user models into one list-driven interface —
+# see defaults/main.yml.
+- name: import sudo group tasks
+  ansible.builtin.import_tasks: sudo_group.yml
+
+- name: import user account tasks
+  ansible.builtin.import_tasks: users.yml
+
+- name: import root account tasks
+  ansible.builtin.import_tasks: root.yml

@@ -1,0 +1,6 @@
+---
+# dispatch to the package + repository tasks for this host's os family.
+# debian (including the dietpi sub-variant) lives in packages-Debian.yml; add a
+# sibling packages-RedHat.yml (dnf + /etc/yum.repos.d) to bring up fedora/rhel.
+- name: include os-family package and repository tasks
+  ansible.builtin.include_tasks: "packages-{{ ansible_facts['os_family'] }}.yml"

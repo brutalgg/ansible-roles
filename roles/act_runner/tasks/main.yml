@@ -1,0 +1,6 @@
+---
+- name: install act runner
+  ansible.builtin.import_tasks: install.yml
+
+- name: configure act runner
+  ansible.builtin.import_tasks: config.yml

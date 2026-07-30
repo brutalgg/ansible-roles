@@ -1,0 +1,143 @@
+; {{ ansible_managed }}
+APP_NAME = {{ gitea_app_name }}
+RUN_USER = git
+RUN_MODE = prod
+WORK_PATH = /var/lib/gitea
+
+[repository]
+ROOT = /var/lib/gitea/git/repositories
+{% if gitea_repository_default_private | length > 0 %}
+DEFAULT_PRIVATE = {{ gitea_repository_default_private }}
+{% endif %}
+
+[repository.local]
+LOCAL_COPY_PATH = /tmp/gitea/local-repo
+
+[repository.upload]
+TEMP_PATH = /tmp/gitea/uploads
+
+[repository.pull-request]
+DEFAULT_MERGE_STYLE = merge
+
+[repository.signing]
+DEFAULT_TRUST_MODEL = committer
+
+[server]
+APP_DATA_PATH = /var/lib/gitea
+PROTOCOL = {{ gitea_protocol }}
+HTTP_PORT = 3000
+DOMAIN = {{ gitea_domain }}
+SSH_DOMAIN = {{ gitea_ssh_domain }}
+ROOT_URL = {{ gitea_root_url }}
+{% if gitea_tls_enabled %}
+CERT_FILE = /etc/gitea/tls/cert.pem
+KEY_FILE = /etc/gitea/tls/key.pem
+{% endif %}
+DISABLE_SSH = false
+START_SSH_SERVER = true
+SSH_PORT = {{ gitea_ssh_published_port }}
+SSH_LISTEN_PORT = 2222
+BUILTIN_SSH_SERVER_USER = git
+LFS_START_SERVER = {{ gitea_lfs_enabled | ternary('true', 'false') }}
+LFS_JWT_SECRET = {{ gitea_lfs_jwt_secret }}
+OFFLINE_MODE = {{ gitea_offline_mode | ternary('true', 'false') }}
+
+[database]
+PATH = /var/lib/gitea/data/gitea.db
+DB_TYPE = postgres
+HOST = db:5432
+NAME = {{ gitea_db_name }}
+USER = {{ gitea_db_user }}
+PASSWD = {{ gitea_postgres_password }}
+SCHEMA =
+SSL_MODE = disable
+LOG_SQL = false
+
+[session]
+PROVIDER_CONFIG = /var/lib/gitea/data/sessions
+PROVIDER = file
+SESSION_LIFE_TIME = 3600
+
+[picture]
+AVATAR_UPLOAD_PATH = /var/lib/gitea/data/avatars
+REPOSITORY_AVATAR_UPLOAD_PATH = /var/lib/gitea/data/repo-avatars
+
+[attachment]
+PATH = /var/lib/gitea/data/attachments
+
+[log]
+ROOT_PATH = /var/lib/gitea/data/log
+MODE = console
+LEVEL = info
+
+[security]
+INSTALL_LOCK = true
+SECRET_KEY = {{ gitea_secret_key }}
+INTERNAL_TOKEN = {{ gitea_internal_token }}
+REVERSE_PROXY_LIMIT = 1
+REVERSE_PROXY_TRUSTED_PROXIES = {{ gitea_reverse_proxy_trusted_proxies }}
+PASSWORD_HASH_ALGO = {{ gitea_password_hash_algo }}
+
+[service]
+DISABLE_REGISTRATION = {{ gitea_disable_registration | ternary('true', 'false') }}
+REQUIRE_SIGNIN_VIEW = {{ gitea_require_signin_view | ternary('true', 'false') }}
+REGISTER_EMAIL_CONFIRM = false
+REGISTER_MANUAL_CONFIRM = {{ gitea_register_manual_confirm | ternary('true', 'false') }}
+ENABLE_NOTIFY_MAIL = {{ gitea_mailer_enabled | ternary('true', 'false') }}
+ENABLE_CAPTCHA = {{ gitea_enable_captcha | ternary('true', 'false') }}
+DEFAULT_KEEP_EMAIL_PRIVATE = {{ gitea_default_keep_email_private | ternary('true', 'false') }}
+DEFAULT_ALLOW_CREATE_ORGANIZATION = {{ gitea_default_allow_create_organization | ternary('true', 'false') }}
+DEFAULT_ENABLE_TIMETRACKING = {{ gitea_default_enable_timetracking | ternary('true', 'false') }}
+NO_REPLY_ADDRESS = {{ gitea_no_reply_address }}
+{% if gitea_email_domain_allowlist | length > 0 %}
+EMAIL_DOMAIN_ALLOWLIST = {{ gitea_email_domain_allowlist | join(',') }}
+{% endif %}
+DEFAULT_USER_VISIBILITY = {{ gitea_default_user_visibility }}
+DEFAULT_ORG_VISIBILITY = {{ gitea_default_org_visibility }}
+
+[lfs]
+PATH = /var/lib/gitea/git/lfs
+
+[mailer]
+ENABLED = {{ gitea_mailer_enabled | ternary('true', 'false') }}
+{% if gitea_mailer_enabled %}
+PROTOCOL = smtp
+SMTP_ADDR = {{ gitea_mailer_host }}
+SMTP_PORT = {{ gitea_mailer_port }}
+FROM = {{ gitea_mailer_from }}
+FORCE_TRUST_SERVER_CERT = {{ gitea_mailer_force_trust_server_cert | ternary('true', 'false') }}
+{% endif %}
+
+[openid]
+ENABLE_OPENID_SIGNIN = false
+ENABLE_OPENID_SIGNUP = false
+
+[oauth2]
+JWT_SECRET = {{ gitea_jwt_secret }}
+
+[cron.update_checker]
+ENABLED = false
+{% if gitea_mirror_default_interval | length > 0 or gitea_mirror_min_interval | length > 0 %}
+
+[mirror]
+{% if gitea_mirror_default_interval | length > 0 %}
+DEFAULT_INTERVAL = {{ gitea_mirror_default_interval }}
+{% endif %}
+{% if gitea_mirror_min_interval | length > 0 %}
+MIN_INTERVAL = {{ gitea_mirror_min_interval }}
+{% endif %}
+{% endif %}
+
+[migrations]
+ALLOW_LOCALNETWORKS = {{ gitea_migrations_allow_localnetworks | ternary('true', 'false') }}
+{% if gitea_migrations_allowed_domains | length > 0 %}
+ALLOWED_DOMAINS = {{ gitea_migrations_allowed_domains }}
+{% endif %}
+SKIP_TLS_VERIFY = {{ gitea_migrations_skip_tls_verify | ternary('true', 'false') }}
+{% for section, options in gitea_extra_config.items() %}
+
+[{{ section }}]
+{% for key, value in options.items() %}
+{{ key }} = {{ value }}
+{% endfor %}
+{% endfor %}

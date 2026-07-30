@@ -1,0 +1,5 @@
+---
+# os-family specific names consumed by the distro-agnostic base tasks and
+# handlers, loaded by tasks/main.yml via first-found on distribution/os_family.
+# add a sibling vars/RedHat.yml (ssh service "sshd", ...) to support fedora/rhel.
+base__ssh_service: ssh

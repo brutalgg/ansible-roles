@@ -1,0 +1,9 @@
+---
+- name: restart ssh
+  ansible.builtin.service:
+    name: "{{ base__ssh_service }}"
+    state: restarted
+
+- name: generate missing host keys
+  ansible.builtin.command: ssh-keygen -A
+  changed_when: true

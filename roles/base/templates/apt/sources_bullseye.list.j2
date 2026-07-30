@@ -1,0 +1,9 @@
+# {{ ansible_managed }}
+deb {{ base_apt_mirror }} bullseye main
+deb-src {{ base_apt_mirror }} bullseye main
+
+deb {{ base_apt_security_mirror }} bullseye-security main
+deb-src {{ base_apt_security_mirror }} bullseye-security main
+
+deb {{ base_apt_mirror }} bullseye-updates main
+deb-src {{ base_apt_mirror }} bullseye-updates main

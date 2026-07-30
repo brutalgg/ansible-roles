@@ -1,0 +1,27 @@
+---
+- name: read the client certificate
+  ansible.builtin.slurp:
+    src: "{{ openvpn_easyrsa_dir }}/pki/issued/{{ openvpn__client }}.crt"
+  register: openvpn__client_cert
+
+- name: read the client key
+  ansible.builtin.slurp:
+    src: "{{ openvpn_easyrsa_dir }}/pki/private/{{ openvpn__client }}.key"
+  register: openvpn__client_key
+  no_log: true
+
+- name: render the client profile on the server
+  ansible.builtin.template:
+    src: client.ovpn.j2
+    dest: "{{ openvpn_dir }}/{{ openvpn__client }}.ovpn"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: fetch the client profile to the controller
+  ansible.builtin.fetch:
+    src: "{{ openvpn_dir }}/{{ openvpn__client }}.ovpn"
+    dest: "{{ openvpn_fetch_client_configs_dir }}/{{ openvpn__client }}.ovpn"
+    flat: true
+  when: openvpn_fetch_client_configs | bool

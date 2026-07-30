@@ -1,0 +1,21 @@
+---
+# both handlers run docker compose, which errors when the docker CLI is absent.
+# handlers fire under --check too, so guard them the same way as deploy.yml:
+# skip only on a host without docker (gitea__docker_cli is set in main.yml).
+- name: restart gitea
+  community.docker.docker_compose_v2:
+    project_src: "{{ gitea_deploy_dir }}"
+    files:
+      - compose.yaml
+    state: restarted
+    services:
+      - server
+  when: not ansible_check_mode or gitea__docker_cli.stat.exists
+
+- name: restart gitea stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ gitea_deploy_dir }}"
+    files:
+      - compose.yaml
+    state: restarted
+  when: not ansible_check_mode or gitea__docker_cli.stat.exists

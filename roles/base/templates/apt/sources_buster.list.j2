@@ -1,0 +1,9 @@
+# {{ ansible_managed }}
+deb {{ base_apt_mirror }} buster main
+deb-src {{ base_apt_mirror }} buster main
+
+deb {{ base_apt_mirror }} buster-updates main
+deb-src {{ base_apt_mirror }} buster-updates main
+
+deb {{ base_apt_security_mirror }} buster/updates main
+deb-src {{ base_apt_security_mirror }} buster/updates main

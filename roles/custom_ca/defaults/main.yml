@@ -1,0 +1,16 @@
+---
+# install a custom CA certificate into the system trust store so the host trusts
+# TLS signed by that CA (internal services, private registries, inter-service
+# https). default true: every host managed by this role gets the cert. set false
+# in group_vars for hosts that should not trust the custom CA.
+custom_ca_enabled: true
+
+# Provide the CA certificate one of two ways (content wins if both set); the cert
+# is environment-specific, so never ship one inside this shared role:
+#   custom_ca_cert_content — inline PEM, e.g. "{{ vault_root_ca }}" from a global.
+#   custom_ca_cert_src     — path to a cert file in the control repo.
+custom_ca_cert_content: ""
+custom_ca_cert_src: ""
+
+# filename the cert is stored under in /usr/local/share/ca-certificates/.
+custom_ca_cert_name: custom-ca.crt

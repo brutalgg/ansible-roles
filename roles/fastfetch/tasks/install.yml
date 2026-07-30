@@ -1,0 +1,73 @@
+---
+# install fastfetch once. the binary stat is the bootstrap sentinel — re-runs
+# are no-ops; the deliberate upgrade lives in update.yml (see docs/STANDARDS.md
+# §2.1). apt/github dispatch is decided per host so a mixed fleet (trixie +
+# bookworm) converges with one play.
+
+- name: check for fastfetch binary
+  ansible.builtin.stat:
+    path: /usr/bin/fastfetch
+  register: fastfetch__binary
+
+- name: install fastfetch
+  when: not fastfetch__binary.stat.exists
+  block:
+    - name: check whether the distro carries a fastfetch package
+      ansible.builtin.command: apt-cache policy fastfetch
+      register: fastfetch__apt_policy
+      changed_when: false
+      check_mode: false  # read-only; must run under --check so the dispatch below is correct
+      when: fastfetch_install_method == 'auto'
+
+    - name: decide the install source
+      ansible.builtin.set_fact:
+        fastfetch__from_apt: >-
+          {{ fastfetch_install_method == 'apt'
+             or (fastfetch_install_method == 'auto'
+                 and 'Candidate:' in fastfetch__apt_policy.stdout
+                 and 'Candidate: (none)' not in fastfetch__apt_policy.stdout) }}
+
+    - name: install fastfetch from the distro repo
+      ansible.builtin.apt:
+        name: fastfetch
+        state: present
+      when: fastfetch__from_apt | bool
+
+    - name: install fastfetch from github releases
+      when: not fastfetch__from_apt | bool
+      block:
+        - name: check latest fastfetch version on github
+          ansible.builtin.uri:
+            url: https://api.github.com/repos/fastfetch-cli/fastfetch/releases/latest
+            url_username: "{{ github_api_user | default(omit) }}"
+            url_password: "{{ github_api_pass | default(omit) }}"
+            return_content: true
+            force_basic_auth: "{{ github_api_auth | default(omit) }}"
+          register: fastfetch__latest_release
+          when: fastfetch_github_version == 'latest'
+          check_mode: false  # read-only GET; must run under --check so .json is available below
+
+        - name: set fastfetch target version
+          ansible.builtin.set_fact:
+            fastfetch__target_version: >-
+              {{ fastfetch__latest_release.json.tag_name
+                 if fastfetch_github_version == 'latest'
+                 else fastfetch_github_version }}
+
+        - name: download the fastfetch .deb
+          ansible.builtin.get_url:
+            url: "https://github.com/fastfetch-cli/fastfetch/releases/download/{{ fastfetch__target_version }}/fastfetch-linux-{{ fastfetch__deb_arch }}.deb"
+            dest: "/tmp/fastfetch-{{ fastfetch__target_version }}-{{ fastfetch__deb_arch }}.deb"
+            owner: root
+            group: root
+            mode: "0644"
+
+        - name: install the fastfetch .deb
+          ansible.builtin.apt:
+            deb: "/tmp/fastfetch-{{ fastfetch__target_version }}-{{ fastfetch__deb_arch }}.deb"
+          when: not ansible_check_mode  # the .deb was not downloaded under --check
+
+        - name: remove the downloaded .deb
+          ansible.builtin.file:
+            path: "/tmp/fastfetch-{{ fastfetch__target_version }}-{{ fastfetch__deb_arch }}.deb"
+            state: absent

@@ -1,0 +1,31 @@
+---
+- name: manage the host firewall
+  when: firewall_manage | bool
+  block:
+    - name: ensure ufw is present
+      ansible.builtin.package:
+        name: ufw
+        state: present
+
+    - name: allow ssh before enabling the firewall
+      community.general.ufw:
+        rule: allow
+        name: OpenSSH
+      when: firewall_allow_ssh | bool
+
+    - name: apply firewall rules
+      community.general.ufw:
+        rule: "{{ item.rule | default('allow') }}"
+        port: "{{ item.port }}"
+        proto: "{{ item.proto | default('tcp') }}"
+        from_ip: "{{ item['from'] | default(omit) }}"
+        comment: "{{ item.comment | default(omit) }}"
+      loop: "{{ firewall_rules }}"
+      loop_control:
+        label: "{{ item.comment | default(item.port) }}"
+
+    - name: default-deny incoming and enable ufw
+      community.general.ufw:
+        state: enabled
+        policy: deny
+        direction: incoming

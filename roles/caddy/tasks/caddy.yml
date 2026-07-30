@@ -1,0 +1,108 @@
+---
+- name: install prerequisites for xcaddy repo
+  ansible.builtin.apt:
+    name:
+      - debian-keyring
+      - debian-archive-keyring
+      - apt-transport-https
+      - golang-go
+      - gnupg
+    state: present
+    update_cache: true
+
+- name: ensure keyring directory exists
+  ansible.builtin.file:
+    path: /usr/share/keyrings
+    state: directory
+    mode: '0755'
+
+- name: download xcaddy gpg key
+  ansible.builtin.get_url:
+    url: "{{ caddy_xcaddy_gpg_url }}"
+    dest: "/tmp/caddy-xcaddy.gpg"
+    mode: '0644'
+
+- name: convert gpg key to keyring format
+  ansible.builtin.command: >
+    gpg --dearmor --yes -o /usr/share/keyrings/caddy-xcaddy-archive-keyring.gpg /tmp/caddy-xcaddy.gpg
+  args:
+    creates: /usr/share/keyrings/caddy-xcaddy-archive-keyring.gpg
+
+- name: download xcaddy sources.list
+  ansible.builtin.get_url:
+    url: "{{ caddy_xcaddy_repo_url }}"
+    dest: "/etc/apt/sources.list.d/caddy-xcaddy.list"
+    mode: '0644'
+
+- name: install xcaddy
+  ansible.builtin.apt:
+    name: xcaddy
+    state: present
+    update_cache: true
+
+- name: build caddy binary (with dns plugin(s) when dns-01 is enabled)
+  ansible.builtin.command:
+    cmd: >-
+      xcaddy build
+      {{ (caddy_dns_plugins | map('regex_replace', '^', '--with ') | join(' ')) if caddy_dns_challenge_enabled else '' }}
+      --output {{ caddy_binary_path }}
+    creates: "{{ caddy_binary_path }}"
+
+- name: ensure caddy user exists
+  ansible.builtin.user:
+    name: "{{ caddy_user }}"
+    create_home: true
+    home: /var/lib/caddy
+    shell: /usr/sbin/nologin
+    comment: "Caddy web server"
+
+- name: create caddy directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ caddy_user }}"
+    group: "{{ caddy_group }}"
+    mode: '0755'
+  loop:
+    - /etc/caddy
+    - /var/log/caddy
+
+- name: deploy caddy systemd service
+  ansible.builtin.template:
+    src: caddy.service.j2
+    dest: /etc/systemd/system/caddy.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - reload systemd
+    - restart caddy
+
+- name: deploy caddy environment file
+  ansible.builtin.copy:
+    dest: "{{ caddy_env_file }}"
+    content: "{{ (caddy_dns_token_env ~ '=' ~ caddy_dns_token ~ '\n') if caddy_dns_challenge_enabled else '# caddy: dns-01 challenge disabled\n' }}"
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  notify:
+    - restart caddy
+
+- name: deploy operator-supplied site tls material
+  ansible.builtin.import_tasks: tls.yml
+
+- name: deploy caddyfile
+  ansible.builtin.template:
+    src: Caddyfile.j2
+    dest: /etc/caddy/Caddyfile
+    owner: "{{ caddy_user }}"
+    group: "{{ caddy_group }}"
+    mode: "0640"
+  notify: reload caddy
+
+- name: enable and start caddy
+  ansible.builtin.service:
+    name: caddy
+    enabled: true
+    state: started
