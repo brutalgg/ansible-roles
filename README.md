@@ -224,17 +224,6 @@ Key: `wireguard_interface` (`wg0`), `wireguard_port` (`51820`),
 
 ---
 
-## Role boundaries (don't merge these)
-
-- **`gitea` + `caddy` + `act_runner`** — three single-responsibility roles, not
-  one bundle. `gitea` owns the server + its database and publishes it on the host;
-  `caddy` fronts it (map a `caddy_sites` entry to `gitea_http_bind`/`_port`);
-  `act_runner` registers CI runners against it. Deploy all three from Ansible so
-  gitea stays a bootstrap seed — never front it with a proxy that is itself
-  deployed from gitea.
-
----
-
 ## License
 
 [MIT](LICENSE).
