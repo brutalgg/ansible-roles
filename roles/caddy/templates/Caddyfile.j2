@@ -1,7 +1,22 @@
 # {{ ansible_managed }}
 {% for site in caddy_sites %}
 {{ site.domains | join(' ') }} {
+{% if site.root is defined %}
+    root * {{ site.root }}
+    file_server
+{% else %}
     reverse_proxy {{ site.upstream }}
+{% endif %}
+{% if site.encode is defined %}
+    encode {{ site.encode }}
+{% endif %}
+{% if site.headers is defined %}
+    header {
+{% for key, value in site.headers.items() %}
+        {{ key }} "{{ value }}"
+{% endfor %}
+    }
+{% endif %}
 
 {% if site.tls_cert is defined %}
     tls {{ caddy_ssl_dir }}/{{ site.name }}.crt {{ caddy_ssl_dir }}/{{ site.name }}.key

@@ -1,0 +1,98 @@
+---
+# out-of-band teardown. NOT imported by main.yml — a provisioning run must never
+# remove a running service as a side effect (docs/STANDARDS.md §2.1). the consumer
+# runs it deliberately, e.g. to switch install modes without leaving a duplicate
+# runner registered with Gitea:
+#   ansible.builtin.import_role: { name: act_runner, tasks_from: teardown.yml }
+# tear down the OLD mode before provisioning the new one — pass the old mode
+# explicitly if you have already flipped act_runner_install_mode, e.g.
+#   -e act_runner_install_mode=native
+#
+# by default teardown only stops/disables the service and removes its delivery
+# mechanism (systemd unit + binary, or the compose stack). set
+# act_runner_teardown_purge=true for a full wipe (config dir, home + the .runner
+# registration state, compose dir + named volume, the runner user). NOTE this only
+# removes LOCAL state; the runner stays listed (offline) in Gitea until removed
+# there.
+
+# ---- native ----
+- name: tear down native act runner
+  when: act_runner_install_mode == 'native'
+  block:
+    - name: check for the act runner systemd unit
+      ansible.builtin.stat:
+        path: /etc/systemd/system/act_runner.service
+      register: act_runner__unit
+      changed_when: false
+
+    - name: stop and disable the act runner service
+      ansible.builtin.systemd:
+        name: act_runner
+        state: stopped
+        enabled: false
+      when: act_runner__unit.stat.exists
+
+    - name: remove the act runner systemd unit
+      ansible.builtin.file:
+        path: /etc/systemd/system/act_runner.service
+        state: absent
+      notify: reload systemd
+
+    - name: remove the act runner binary
+      ansible.builtin.file:
+        path: "{{ act_runner_binary }}"
+        state: absent
+
+    - name: remove act runner config and home (purge)
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ act_runner_config_directory }}"
+        - "{{ act_runner_home }}"
+      when: act_runner_teardown_purge | bool
+
+# ---- container ----
+- name: tear down container act runner
+  when: act_runner_install_mode == 'container'
+  block:
+    # detect the docker CLI role-locally so the compose teardown skips cleanly
+    # under --check on a host that has no docker (docs/CONVENTIONS.md check-mode
+    # safety).
+    - name: detect docker cli
+      ansible.builtin.stat:
+        path: /usr/bin/docker
+      register: act_runner__docker_cli
+      changed_when: false
+
+    - name: check for the act runner compose file
+      ansible.builtin.stat:
+        path: "{{ act_runner_compose_dir }}/compose.yaml"
+      register: act_runner__compose_file
+      changed_when: false
+
+    - name: stop and remove the act runner stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ act_runner_compose_dir }}"
+        files:
+          - compose.yaml
+        state: absent
+        # only drop the runner named volume (holds .runner) on a full purge.
+        remove_volumes: "{{ act_runner_teardown_purge | bool }}"
+      when:
+        - act_runner__compose_file.stat.exists
+        - not ansible_check_mode or act_runner__docker_cli.stat.exists
+
+    - name: remove act runner compose dir (purge)
+      ansible.builtin.file:
+        path: "{{ act_runner_compose_dir }}"
+        state: absent
+      when: act_runner_teardown_purge | bool
+
+# ---- shared (purge only) ----
+- name: remove the act runner user (purge)
+  ansible.builtin.user:
+    name: "{{ act_runner_user }}"
+    state: absent
+    remove: false
+  when: act_runner_teardown_purge | bool

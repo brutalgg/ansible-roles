@@ -1,6 +1,36 @@
 ---
-- name: import caddy tasks
-  ansible.builtin.import_tasks: caddy.yml
+# thin dispatcher: the install mode selects which install-*.yml runs. native
+# (the default) is the current systemd/xcaddy path, unchanged; container runs the
+# caddy image as a docker compose service. caddy_sites (and its per-site tls
+# material) is the single public interface for both — a consumer switches modes
+# with caddy_install_mode alone.
+- name: validate caddy install mode
+  ansible.builtin.assert:
+    that:
+      - caddy_install_mode in ['native', 'container']
+    fail_msg: "caddy_install_mode must be 'native' or 'container' (got '{{ caddy_install_mode }}')."
+    quiet: true
+  tags:
+    - caddy
+  when: caddy_enabled | bool
+
+# each caddy_sites entry serves EITHER a reverse-proxy upstream OR static files
+# from a root — exactly one, in both modes.
+- name: validate caddy_sites entries
+  ansible.builtin.assert:
+    that:
+      - (item.root is defined) != (item.upstream is defined)
+    fail_msg: "each caddy_sites entry needs exactly one of root: or upstream: (site '{{ item.name }}')."
+    quiet: true
+  loop: "{{ caddy_sites }}"
+  loop_control:
+    label: "{{ item.name }}"
+  tags:
+    - caddy
+  when: caddy_enabled | bool
+
+- name: import caddy install tasks
+  ansible.builtin.include_tasks: "install-{{ caddy_install_mode }}.yml"
   tags:
     - caddy
   when: caddy_enabled | bool

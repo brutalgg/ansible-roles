@@ -1,0 +1,33 @@
+---
+# out-of-band upgrade for the container install mode. bump act_runner_version
+# (which pins act_runner_image to the new tag), then run via
+# playbooks/update.yml --tags act_runner. re-render the compose/config with the
+# new tag, pull the image, and recreate the runner.
+- name: detect docker cli
+  ansible.builtin.stat:
+    path: /usr/bin/docker
+  register: act_runner__docker_cli
+  changed_when: false
+
+- name: re-render act runner config for the new version
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ act_runner_compose_dir }}/config.yaml"
+    mode: "0644"
+
+- name: re-render act runner compose for the new image
+  ansible.builtin.template:
+    src: compose.yaml.j2
+    dest: "{{ act_runner_compose_dir }}/compose.yaml"
+    mode: "0640"
+  no_log: true
+
+- name: pull the new image and recreate the runner
+  community.docker.docker_compose_v2:
+    project_src: "{{ act_runner_compose_dir }}"
+    files:
+      - compose.yaml
+    state: present
+    pull: always
+    recreate: auto
+  when: not ansible_check_mode or act_runner__docker_cli.stat.exists

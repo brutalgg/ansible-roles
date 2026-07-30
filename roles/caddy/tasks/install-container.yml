@@ -1,0 +1,105 @@
+---
+# caddy container install mode. runs the caddy image as a docker compose service.
+# the public interface is identical to native mode: the SAME Caddyfile.j2 renders
+# for both, caddy_ssl_dir is bind-mounted at /etc/caddy/ssl (so the per-site
+# tls_cert/tls_key paths in the Caddyfile resolve unchanged), and tls.yml lays
+# down the operator cert material exactly as in native mode.
+
+# xcaddy dns-plugin caveat: native mode BUILDS caddy with caddy_dns_plugins for
+# the acme dns-01 challenge. the stock caddy image does not include those plugins,
+# so fail fast here unless the operator supplied a caddy_image prebuilt with them
+# (caddy_image_has_dns_plugins=true). the common container case — operator-supplied
+# tls_cert/tls_key sites, no dns-01 — works on the stock image.
+- name: assert dns-01 challenge has a plugin-capable image
+  ansible.builtin.assert:
+    that:
+      - not caddy_dns_challenge_enabled or caddy_image_has_dns_plugins
+    fail_msg: >-
+      caddy_install_mode=container with caddy_dns_challenge_enabled needs a
+      caddy_image prebuilt (via xcaddy) with the dns plugin(s)
+      ({{ caddy_dns_plugins | join(', ') }}); the stock image ({{ caddy_image }})
+      does not include them. supply such an image and set
+      caddy_image_has_dns_plugins=true, or disable the dns-01 challenge and use
+      operator-supplied tls_cert/tls_key sites.
+    quiet: true
+
+# detect the docker CLI role-locally so the compose tasks and handlers skip
+# cleanly under --check on a host that has no docker yet (see docs/CONVENTIONS.md
+# check-mode safety). kept role-local rather than borrowing the docker role's
+# fact so caddy stays runnable on its own.
+- name: detect docker cli
+  ansible.builtin.stat:
+    path: /usr/bin/docker
+  register: caddy__docker_cli
+  changed_when: false
+
+- name: assert docker cli is present
+  ansible.builtin.assert:
+    that:
+      - caddy__docker_cli.stat.exists
+    fail_msg: >-
+      caddy_install_mode=container requires the docker CLI at /usr/bin/docker.
+      run the docker role (or your host baseline) before this role.
+    quiet: true
+  # fail fast on a real run; skip cleanly under --check on an un-provisioned host.
+  when: not ansible_check_mode or caddy__docker_cli.stat.exists
+
+# the caddy user/group own the bind-mounted cert material (tls.yml chowns to
+# them). the container itself runs as root internally, but keeping the host-side
+# ownership identical to native mode lets tls.yml be reused unchanged.
+- name: ensure caddy group exists
+  ansible.builtin.group:
+    name: "{{ caddy_group }}"
+    system: true
+
+- name: ensure caddy user exists
+  ansible.builtin.user:
+    name: "{{ caddy_user }}"
+    group: "{{ caddy_group }}"
+    system: true
+    create_home: false
+    home: /var/lib/caddy
+    shell: /usr/sbin/nologin
+    comment: "Caddy web server"
+
+- name: create caddy compose dir
+  ansible.builtin.file:
+    path: "{{ caddy_compose_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: create caddy log dir
+  ansible.builtin.file:
+    path: /var/log/caddy
+    state: directory
+    owner: "{{ caddy_user }}"
+    group: "{{ caddy_group }}"
+    mode: "0755"
+
+- name: deploy operator-supplied site tls material
+  ansible.builtin.import_tasks: tls.yml
+
+- name: render caddyfile for the container
+  ansible.builtin.template:
+    src: Caddyfile.j2
+    dest: "{{ caddy_compose_dir }}/Caddyfile"
+    mode: "0644"
+  notify: reload caddy
+
+- name: render caddy compose file
+  ansible.builtin.template:
+    src: compose.yaml.j2
+    dest: "{{ caddy_compose_dir }}/compose.yaml"
+    mode: "0640"
+  # may embed caddy_dns_token in the environment block.
+  no_log: true
+  notify: restart caddy
+
+- name: ensure caddy stack is up
+  community.docker.docker_compose_v2:
+    project_src: "{{ caddy_compose_dir }}"
+    files:
+      - compose.yaml
+    state: present
+    pull: "{{ 'always' if caddy_container_force_pull else 'missing' }}"
+  when: not ansible_check_mode or caddy__docker_cli.stat.exists

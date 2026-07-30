@@ -1,0 +1,65 @@
+---
+# act_runner container install mode. runs gitea/act_runner as a docker compose
+# service. registration uses the image's env-based auto-registration
+# (GITEA_INSTANCE_URL + GITEA_RUNNER_REGISTRATION_TOKEN) instead of the
+# `act_runner register` command, so there is no host binary or runner user. the
+# public interface (act_runner_gitea_instance_url, act_runner_token, and the
+# act_runner_* config vars) is identical to native mode.
+
+# detect the docker CLI role-locally so the compose task and handler skip cleanly
+# under --check on a host that has no docker yet (see docs/CONVENTIONS.md
+# check-mode safety). kept role-local so act_runner stays runnable on its own.
+- name: detect docker cli
+  ansible.builtin.stat:
+    path: /usr/bin/docker
+  register: act_runner__docker_cli
+  changed_when: false
+
+- name: assert docker cli is present
+  ansible.builtin.assert:
+    that:
+      - act_runner__docker_cli.stat.exists
+    fail_msg: >-
+      act_runner_install_mode=container requires the docker CLI at /usr/bin/docker.
+      run the docker role (or your host baseline) before this role.
+    quiet: true
+  # fail fast on a real run; skip cleanly under --check on an un-provisioned host.
+  when: not ansible_check_mode or act_runner__docker_cli.stat.exists
+
+- name: validate act runner registration token
+  ansible.builtin.assert:
+    that:
+      - act_runner_token | length > 0
+    fail_msg: "act_runner_token is required (wire it from your vault in the consuming play)."
+    quiet: true
+
+- name: create act runner compose dir
+  ansible.builtin.file:
+    path: "{{ act_runner_compose_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: render act runner config
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ act_runner_compose_dir }}/config.yaml"
+    mode: "0644"
+  notify: restart act runner
+
+- name: render act runner compose file
+  ansible.builtin.template:
+    src: compose.yaml.j2
+    dest: "{{ act_runner_compose_dir }}/compose.yaml"
+    mode: "0640"
+  # carries the registration token in the environment block.
+  no_log: true
+  notify: restart act runner
+
+- name: ensure act runner stack is up
+  community.docker.docker_compose_v2:
+    project_src: "{{ act_runner_compose_dir }}"
+    files:
+      - compose.yaml
+    state: present
+    pull: "{{ 'always' if act_runner_image_force_pull else 'missing' }}"
+  when: not ansible_check_mode or act_runner__docker_cli.stat.exists

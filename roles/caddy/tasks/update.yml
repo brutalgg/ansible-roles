@@ -1,0 +1,49 @@
+---
+# out-of-band upgrade. NOT imported by main.yml — a provisioning run must never
+# silently upgrade caddy (docs/STANDARDS.md §2.1). the consumer runs this
+# deliberately, e.g. after bumping caddy_image (container) or to rebuild the
+# binary against the latest caddy (native):
+#   ansible.builtin.import_role: { name: caddy, tasks_from: update.yml }
+#
+# native: install-native.yml fetches/builds the binary only when absent
+# (creates:), so the upgrade is a forced xcaddy rebuild here. container: pull the
+# new caddy_image and recreate the service.
+
+# --- native: rebuild the caddy binary via xcaddy ---
+- name: rebuild caddy binary (native)
+  ansible.builtin.command:
+    cmd: >-
+      xcaddy build
+      {{ (caddy_dns_plugins | map('regex_replace', '^', '--with ') | join(' ')) if caddy_dns_challenge_enabled else '' }}
+      --output {{ caddy_binary_path }}
+  changed_when: true
+  notify: restart caddy
+  when: caddy_install_mode == 'native'
+
+# --- container: pull the new image and recreate the stack ---
+- name: detect docker cli
+  ansible.builtin.stat:
+    path: /usr/bin/docker
+  register: caddy__docker_cli
+  changed_when: false
+  when: caddy_install_mode == 'container'
+
+- name: re-render caddy compose for the new image
+  ansible.builtin.template:
+    src: compose.yaml.j2
+    dest: "{{ caddy_compose_dir }}/compose.yaml"
+    mode: "0640"
+  no_log: true
+  when: caddy_install_mode == 'container'
+
+- name: pull the new image and recreate caddy
+  community.docker.docker_compose_v2:
+    project_src: "{{ caddy_compose_dir }}"
+    files:
+      - compose.yaml
+    state: present
+    pull: always
+    recreate: auto
+  when:
+    - caddy_install_mode == 'container'
+    - not ansible_check_mode or caddy__docker_cli.stat.exists

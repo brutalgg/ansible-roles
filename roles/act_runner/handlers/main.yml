@@ -1,5 +1,28 @@
 ---
-- name: restart act runner
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+# restart operates on the native systemd service OR the container depending on
+# act_runner_install_mode. tasks notify the topic ("restart act runner") and the
+# handler for the active mode runs while the other is skipped. the container
+# handler carries the same --check guard as the compose task (see
+# install-container.yml "detect docker cli") so a dry run on a docker-less host
+# skips instead of erroring.
+- name: restart act runner (native)
   ansible.builtin.systemd:
     name: act_runner
     state: restarted
+  listen: restart act runner
+  when: act_runner_install_mode == 'native'
+
+- name: restart act runner (container)
+  community.docker.docker_compose_v2:
+    project_src: "{{ act_runner_compose_dir }}"
+    files:
+      - compose.yaml
+    state: restarted
+  listen: restart act runner
+  when:
+    - act_runner_install_mode == 'container'
+    - not ansible_check_mode or act_runner__docker_cli.stat.exists

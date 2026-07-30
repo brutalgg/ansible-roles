@@ -1,0 +1,12 @@
+---
+# native install mode: the current systemd-daemon path, unchanged. install.yml
+# provisions the runner user (and its docker-group membership when
+# act_runner_config_type == container), fetches the pinned binary, and config.yml
+# registers the runner and writes the systemd unit. these user/docker-group steps
+# do NOT apply in container mode, which is why they live here rather than in the
+# dispatcher.
+- name: install act runner binary and user
+  ansible.builtin.import_tasks: install.yml
+
+- name: configure act runner
+  ansible.builtin.import_tasks: config.yml

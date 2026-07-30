@@ -1,0 +1,32 @@
+# {{ ansible_managed }}
+services:
+  caddy:
+    image: {{ caddy_image }}
+    container_name: caddy
+    restart: always
+{% if caddy_dns_challenge_enabled %}
+    environment:
+      - {{ caddy_dns_token_env }}={{ caddy_dns_token }}
+{% endif %}
+    ports:
+      - "{{ caddy_http_port }}:80"
+      - "{{ caddy_https_port }}:443"
+{% if caddy_admin_port_published %}
+      - "{{ caddy_admin_port }}:2019"
+{% endif %}
+    volumes:
+      - {{ caddy_compose_dir }}/Caddyfile:/etc/caddy/Caddyfile:ro
+      - {{ caddy_ssl_dir }}:/etc/caddy/ssl:ro
+      - /var/log/caddy:/var/log/caddy
+      - caddy_data:/data
+      - caddy_config:/config
+{% for site in caddy_sites if site.root is defined %}
+      - {{ site.root }}:{{ site.root }}:ro
+{% endfor %}
+{% for volume in caddy_container_extra_volumes %}
+      - {{ volume }}
+{% endfor %}
+
+volumes:
+  caddy_data:
+  caddy_config:

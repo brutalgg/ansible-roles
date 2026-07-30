@@ -165,9 +165,19 @@ the deliberate upgrade is `tasks_from: update.yml` (honors the shared
 > the control repo's encrypted vault.
 
 ### `act_runner` — Gitea CI runner
-Native systemd runner with optional container job execution.
+Installs the runner **native** (systemd daemon from the pinned binary, the
+default) or as a **container** (`act_runner_install_mode: container` —
+`gitea/act_runner` via docker compose, registered through the image's env-based
+auto-registration); the same config interface drives both. Independently,
+`act_runner_config_type` (`host`|`container`) selects where CI **jobs** run.
+Container install mode needs the `docker` role first. Switch an already-provisioned
+host between modes by running the out-of-band `tasks_from: teardown.yml` for the
+old mode first (`act_runner_teardown_purge` for a full wipe), then provisioning
+the new mode.
 Required: `act_runner_gitea_instance_url`, `act_runner_token` (**vault**).
-Key: `act_runner_version`, `act_runner_config_type` (`host`|`container`).
+Key: `act_runner_version`, `act_runner_install_mode` (`native`|`container`),
+`act_runner_config_type` (`host`|`container`), `act_runner_image`,
+`act_runner_compose_dir`.
 
 ### `autorestic` — Restic backups
 Restic + autorestic with systemd timers and NFS handling (managed on VMs,
@@ -176,11 +186,21 @@ Required: `autorestic_services` (host_vars), `autorestic_restic_password` (**vau
 Key: `autorestic_nfs_managed`, `autorestic_dest_dir`, `autorestic_schedule`.
 
 ### `caddy` — reverse proxy / TLS
-Systemd Caddy, disabled by default. Renders sites from `caddy_sites`. Each site
-does ACME (dns-01/http-01), `tls internal`, or operator-supplied certs via
-per-site `tls_cert`/`tls_key` (written under `caddy_ssl_dir`).
-Key: `caddy_enabled`, `caddy_sites` (domain/upstream/tls per entry),
-`caddy_le_staging`, `caddy_resolvers`.
+Caddy, disabled by default. Installs **native** (systemd binary built with xcaddy,
+the default) or as a **container** (`caddy_install_mode: container` — the caddy
+image via docker compose); the same `caddy_sites` interface drives both, so a
+consumer switches modes with one var. Renders sites from `caddy_sites`: each site
+reverse-proxies an `upstream` **or** serves static files from a `root`
+(+ optional `encode`/`headers`), and does ACME (dns-01/http-01), `tls internal`,
+or operator-supplied certs via per-site `tls_cert`/`tls_key` (under `caddy_ssl_dir`).
+Container mode needs the `docker` role first and, for the dns-01 challenge, a
+`caddy_image` prebuilt with the dns plugin(s) (`caddy_image_has_dns_plugins`).
+Switching an already-provisioned host between modes: run the out-of-band
+`tasks_from: teardown.yml` for the old mode first (it frees `:80`/`:443`;
+`caddy_teardown_purge` for a full wipe), then provision the new mode.
+Key: `caddy_enabled`, `caddy_install_mode`, `caddy_sites`
+(domain / upstream|root / tls per entry), `caddy_le_staging`, `caddy_resolvers`,
+`caddy_image`, `caddy_compose_dir`.
 
 ### `gitea` — self-hosted git host
 Compose stack (gitea + its own postgres). **Standalone by default**: reachable

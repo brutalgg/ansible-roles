@@ -1,6 +1,17 @@
 ---
-- name: install act runner
-  ansible.builtin.import_tasks: install.yml
+# thin dispatcher: the install mode selects which install-*.yml runs. native
+# (the default) installs the systemd daemon from the downloaded binary, unchanged;
+# container runs gitea/act_runner as a docker compose service. the public
+# interface (act_runner_gitea_instance_url, act_runner_token, and the config vars)
+# is identical for both — a consumer switches modes with act_runner_install_mode
+# alone. NOTE this is distinct from act_runner_config_type, which selects the JOB
+# execution backend and applies in either install mode.
+- name: validate act runner install mode
+  ansible.builtin.assert:
+    that:
+      - act_runner_install_mode in ['native', 'container']
+    fail_msg: "act_runner_install_mode must be 'native' or 'container' (got '{{ act_runner_install_mode }}')."
+    quiet: true
 
-- name: configure act runner
-  ansible.builtin.import_tasks: config.yml
+- name: install act runner
+  ansible.builtin.include_tasks: "install-{{ act_runner_install_mode }}.yml"

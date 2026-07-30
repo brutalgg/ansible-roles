@@ -1,4 +1,26 @@
 ---
+# --- install mode ---
+# how the act_runner service ITSELF is installed:
+#   native    — systemd daemon running the downloaded binary (the default;
+#               byte-identical to previous releases).
+#   container — gitea/act_runner run as a docker compose service, registered via
+#               the image's env-based auto-registration.
+# NOTE this is distinct from act_runner_config_type below, which selects the JOB
+# execution backend (host vs docker) and applies in BOTH install modes. the public
+# interface (act_runner_gitea_instance_url, act_runner_token, and the config vars)
+# is identical across install modes. container mode requires the docker CLI on the
+# host (run the docker role first) and is a clean no-op under --check on a host
+# that has no docker yet.
+act_runner_install_mode: native
+
+# out-of-band teardown (tasks/teardown.yml, reached from an ops playbook — never
+# run during provisioning). false: stop/disable the service and remove its
+# delivery mechanism only (unit + binary, or the compose stack). true: full wipe
+# (config dir, home + the .runner state, compose dir + named volume, the runner
+# user). local only — the runner stays listed (offline) in Gitea until removed
+# there.
+act_runner_teardown_purge: false
+
 act_runner_user: "act_runner"
 act_runner_home: "/var/lib/act_runner"
 act_runner_binary: "/usr/local/bin/act_runner"
@@ -13,6 +35,18 @@ act_runner_arch: "amd64"
 act_runner_os: "linux"
 act_runner_download_url: >-
   https://gitea.com/gitea/act_runner/releases/download/v{{ act_runner_version }}/act_runner-{{ act_runner_version }}-{{ act_runner_os }}-{{ act_runner_arch }}
+
+# --- container install mode ---
+# everything below is consulted only when act_runner_install_mode == container.
+# the runner image, pinned to act_runner_version so the container tracks the same
+# release as the native binary.
+act_runner_image: "gitea/act_runner:{{ act_runner_version }}"
+# compose project dir — the rendered compose.yaml and config.yaml live here.
+act_runner_compose_dir: /opt/stacks/act_runner
+# pull policy for the runner image on a provisioning run: true always re-pulls,
+# false pulls only when the pinned tag is absent locally. deliberate upgrades live
+# in update.yml (run out of band).
+act_runner_image_force_pull: false
 
 # execution backend: host (run jobs directly on the host) or container (run jobs
 # in docker). drives container.enabled in the rendered config and whether the

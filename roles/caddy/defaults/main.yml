@@ -1,5 +1,25 @@
 ---
 caddy_enabled: false
+
+# --- install mode ---
+# how caddy is installed:
+#   native    — systemd service running a binary built with xcaddy (the default;
+#               byte-identical to previous releases).
+#   container — the caddy image run as a docker compose service.
+# the public interface is identical either way: caddy_sites and the per-site
+# tls_cert/tls_key material drive both modes, so a consumer switches modes with
+# this one var and nothing else. container mode requires the docker CLI on the
+# host (run the docker role / host baseline first) and is a clean no-op under
+# --check on a host that has no docker yet.
+caddy_install_mode: native
+
+# out-of-band teardown (tasks/teardown.yml, reached from an ops playbook — never
+# run during provisioning). false: stop/disable the service and remove its
+# delivery mechanism only (unit + binary, or the compose stack) so the ports free
+# up for the other mode, leaving shared config/cert material in place. true: full
+# wipe (config, ssl material, logs, compose dir + named volumes, the caddy user).
+caddy_teardown_purge: false
+
 caddy_user: caddy
 caddy_group: caddy
 caddy_binary_path: /usr/bin/caddy
@@ -42,12 +62,21 @@ caddy_dns_token: ""
 # --- xcaddy build toolchain sources (override for an internal apt mirror) ---
 caddy_xcaddy_gpg_url: https://dl.cloudsmith.io/public/caddy/xcaddy/gpg.key
 caddy_xcaddy_repo_url: https://dl.cloudsmith.io/public/caddy/xcaddy/debian.deb.txt
-# reverse-proxy sites. caddy owns this interface; a consuming service maps its
-# own vars in from its group_vars rather than caddy reaching into the service
-# (see docs/STANDARDS.md §2.3). per-entry schema:
+# reverse-proxy / static sites. caddy owns this interface; a consuming service
+# maps its own vars in from its group_vars rather than caddy reaching into the
+# service (see docs/STANDARDS.md §2.3). the interface is identical in native and
+# container mode. per-entry schema:
 #   name:         label; names the per-site access log (/var/log/caddy/<name>-access.log)
 #   domains:      list of public hostnames caddy serves and obtains certs for
-#   upstream:     host:port caddy reverse-proxies to
+#   upstream:     host:port caddy reverse-proxies to. EITHER upstream OR root must
+#                 be set per site (exactly one — asserted in main.yml).
+#   root:         optional filesystem path — serve static files from here
+#                 (root * <path> + file_server) instead of reverse-proxying. in
+#                 container mode the path is bind-mounted read-only into the
+#                 container at the same path automatically.
+#   encode:       optional — response encoders, e.g. "gzip" or "zstd gzip".
+#   headers:      optional map of response headers to set, rendered as a
+#                 header { KEY "VALUE" ... } block (e.g. HSTS, X-Frame-Options).
 #   tls_staging:  optional bool — use le staging for this site only (default caddy_le_staging)
 #   tls_internal: optional bool — use caddy's internal ca instead of public le (default false)
 #   tls_cert:     optional PEM — operator-supplied public cert (e.g. signed by an
@@ -56,3 +85,33 @@ caddy_xcaddy_repo_url: https://dl.cloudsmith.io/public/caddy/xcaddy/debian.deb.t
 #   tls_key:      optional PEM — the private key for tls_cert (wire from vault).
 # precedence when more than one is set: tls_cert > tls_internal > acme.
 caddy_sites: []
+
+# --- container install mode ---
+# everything below is consulted only when caddy_install_mode == container.
+#
+# the caddy image to run. the STOCK image does NOT include the xcaddy dns plugins
+# (see caddy_image_has_dns_plugins). for the common container case
+# (operator-supplied tls_cert/tls_key sites, no dns-01) the stock image is fine.
+caddy_image: "caddy:2-alpine"
+# compose project dir — the rendered compose.yaml and Caddyfile live here.
+caddy_compose_dir: /opt/stacks/caddy
+# host ports published onto the container's 80/443.
+caddy_http_port: 80
+caddy_https_port: 443
+# the caddy admin api (2019) is unauthenticated; keep it container-local by
+# default. publish it only if you deliberately need remote admin access.
+caddy_admin_port_published: false
+caddy_admin_port: 2019
+# pull policy on a provisioning run: true always re-pulls caddy_image, false pulls
+# only when the image is absent. deliberate upgrades live in update.yml.
+caddy_container_force_pull: false
+# the acme dns-01 challenge needs the caddy_dns_plugins compiled into the image.
+# the stock image lacks them, so container mode FAILS FAST when
+# caddy_dns_challenge_enabled is true unless you set this true after supplying a
+# caddy_image prebuilt (via xcaddy) with those plugins. leave false for the common
+# no-dns-01 case.
+caddy_image_has_dns_plugins: false
+# extra host->container bind mounts, each a raw compose volume string
+# (e.g. "/srv/www:/srv/www:ro"). site roots (caddy_sites[].root) are bind-mounted
+# automatically; use this for anything else the container needs.
+caddy_container_extra_volumes: []

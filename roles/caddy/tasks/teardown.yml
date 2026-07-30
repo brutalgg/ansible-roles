@@ -1,0 +1,102 @@
+---
+# out-of-band teardown. NOT imported by main.yml — a provisioning run must never
+# remove a running service as a side effect (docs/STANDARDS.md §2.1). the consumer
+# runs it deliberately, e.g. to switch install modes without a conflict (native
+# binds :80/:443 on the host directly; container republishes them):
+#   ansible.builtin.import_role: { name: caddy, tasks_from: teardown.yml }
+# tear down the OLD mode before provisioning the new one — pass the old mode
+# explicitly if you have already flipped caddy_install_mode, e.g.
+#   -e caddy_install_mode=native
+#
+# by default teardown only stops/disables the service and removes its delivery
+# mechanism (systemd unit + binary, or the compose stack) so the ports free up;
+# shared config and operator cert material are left in place so the other mode can
+# reuse them. set caddy_teardown_purge=true for a full wipe (config, ssl material,
+# logs, compose dir + named volumes, the caddy user).
+
+# ---- native ----
+- name: tear down native caddy
+  when: caddy_install_mode == 'native'
+  block:
+    - name: check for the caddy systemd unit
+      ansible.builtin.stat:
+        path: /etc/systemd/system/caddy.service
+      register: caddy__unit
+      changed_when: false
+
+    - name: stop and disable the caddy service
+      ansible.builtin.systemd:
+        name: caddy
+        state: stopped
+        enabled: false
+      when: caddy__unit.stat.exists
+
+    - name: remove the caddy systemd unit
+      ansible.builtin.file:
+        path: /etc/systemd/system/caddy.service
+        state: absent
+      notify: reload systemd
+
+    - name: remove the caddy binary
+      ansible.builtin.file:
+        path: "{{ caddy_binary_path }}"
+        state: absent
+
+    - name: remove caddy config, cert material and logs (purge)
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/caddy
+        - "{{ caddy_ssl_dir }}"
+        - /var/log/caddy
+      when: caddy_teardown_purge | bool
+
+# ---- container ----
+- name: tear down container caddy
+  when: caddy_install_mode == 'container'
+  block:
+    # detect the docker CLI role-locally so the compose teardown skips cleanly
+    # under --check on a host that has no docker (docs/CONVENTIONS.md check-mode
+    # safety).
+    - name: detect docker cli
+      ansible.builtin.stat:
+        path: /usr/bin/docker
+      register: caddy__docker_cli
+      changed_when: false
+
+    - name: check for the caddy compose file
+      ansible.builtin.stat:
+        path: "{{ caddy_compose_dir }}/compose.yaml"
+      register: caddy__compose_file
+      changed_when: false
+
+    - name: stop and remove the caddy stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ caddy_compose_dir }}"
+        files:
+          - compose.yaml
+        state: absent
+        # only drop the caddy_data/caddy_config named volumes on a full purge.
+        remove_volumes: "{{ caddy_teardown_purge | bool }}"
+      when:
+        - caddy__compose_file.stat.exists
+        - not ansible_check_mode or caddy__docker_cli.stat.exists
+
+    - name: remove caddy compose dir, cert material and logs (purge)
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ caddy_compose_dir }}"
+        - "{{ caddy_ssl_dir }}"
+        - /var/log/caddy
+      when: caddy_teardown_purge | bool
+
+# ---- shared (purge only) ----
+- name: remove the caddy user (purge)
+  ansible.builtin.user:
+    name: "{{ caddy_user }}"
+    state: absent
+    remove: false
+  when: caddy_teardown_purge | bool

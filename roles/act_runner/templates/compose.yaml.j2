@@ -1,0 +1,26 @@
+# {{ ansible_managed }}
+services:
+  act_runner:
+    image: {{ act_runner_image }}
+    container_name: act_runner
+    restart: always
+    environment:
+      # env-based auto-registration: the entrypoint registers the runner on first
+      # start using these, then reuses the .runner state in the mounted home.
+      - CONFIG_FILE=/config.yaml
+      - GITEA_INSTANCE_URL={{ act_runner_gitea_instance_url }}
+      - GITEA_RUNNER_REGISTRATION_TOKEN={{ act_runner_token }}
+      - GITEA_RUNNER_NAME={{ act_runner_name }}
+{% if act_runner_labels | length > 0 %}
+      - GITEA_RUNNER_LABELS={{ act_runner_labels | join(',') }}
+{% endif %}
+    volumes:
+      # the runner launches job containers via the host docker socket.
+      - /var/run/docker.sock:/var/run/docker.sock
+      - {{ act_runner_compose_dir }}/config.yaml:/config.yaml:ro
+      # .runner registration state persists here (config.yaml's runner.file points
+      # at {{ act_runner_runner_file }}, inside this mounted home).
+      - runner:{{ act_runner_home }}
+
+volumes:
+  runner:

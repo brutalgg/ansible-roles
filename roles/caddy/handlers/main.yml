@@ -3,12 +3,44 @@
   ansible.builtin.systemd:
     daemon_reload: true
 
-- name: reload caddy
+# reload/restart operate on the native service OR the container depending on
+# caddy_install_mode. tasks notify the topic ("reload caddy" / "restart caddy")
+# and the handler for the active mode runs while the other is skipped. the
+# container handlers carry the same --check guard as the compose tasks (see
+# install-container.yml "detect docker cli") so a dry run on a docker-less host
+# skips instead of erroring.
+- name: reload caddy (native)
   ansible.builtin.service:
     name: caddy
     state: reloaded
+  listen: reload caddy
+  when: caddy_install_mode == 'native'
 
-- name: restart caddy
+- name: reload caddy (container)
+  community.docker.docker_compose_v2:
+    project_src: "{{ caddy_compose_dir }}"
+    files:
+      - compose.yaml
+    state: restarted
+  listen: reload caddy
+  when:
+    - caddy_install_mode == 'container'
+    - not ansible_check_mode or caddy__docker_cli.stat.exists
+
+- name: restart caddy (native)
   ansible.builtin.service:
     name: caddy
     state: restarted
+  listen: restart caddy
+  when: caddy_install_mode == 'native'
+
+- name: restart caddy (container)
+  community.docker.docker_compose_v2:
+    project_src: "{{ caddy_compose_dir }}"
+    files:
+      - compose.yaml
+    state: restarted
+  listen: restart caddy
+  when:
+    - caddy_install_mode == 'container'
+    - not ansible_check_mode or caddy__docker_cli.stat.exists
