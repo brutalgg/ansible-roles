@@ -8,6 +8,9 @@
 - name: issue and revoke client certificates
   ansible.builtin.import_tasks: clients.yml
 
+- name: manage the certificate revocation list
+  ansible.builtin.import_tasks: crl.yml
+
 - name: configure the openvpn server
   ansible.builtin.import_tasks: config.yml
 

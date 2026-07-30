@@ -8,7 +8,11 @@ resolv-retry infinite
 nobind
 persist-key
 persist-tun
+tls-client
 remote-cert-tls server
+{% if openvpn_verify_cn %}
+verify-x509-name {{ openvpn_instance }} name
+{% endif %}
 {% if openvpn_cipher | length > 0 %}
 cipher {{ openvpn_cipher }}
 data-ciphers {{ openvpn_cipher }}
@@ -18,6 +22,12 @@ auth {{ openvpn_auth_digest }}
 {% endif %}
 {% if openvpn_tls_version_min | length > 0 %}
 tls-version-min {{ openvpn_tls_version_min }}
+{% endif %}
+{% if openvpn_tls_cipher | length > 0 %}
+tls-cipher {{ openvpn_tls_cipher }}
+{% endif %}
+{% if openvpn_tls_ciphersuites | length > 0 %}
+tls-ciphersuites {{ openvpn_tls_ciphersuites }}
 {% endif %}
 {% if openvpn_compression | length > 0 %}
 compress {{ openvpn_compression }}

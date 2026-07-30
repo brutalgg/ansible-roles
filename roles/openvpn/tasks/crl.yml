@@ -1,0 +1,78 @@
+---
+# the crl is managed whenever verification is on (openvpn_use_crl) or a revocation
+# was requested this run. clients.yml has already revoked; here we (re)generate the
+# crl so it reflects those revocations and publish it for the running daemon.
+- name: manage the certificate revocation list
+  when:
+    - openvpn_use_crl | bool or openvpn_revoke_these_certs | length > 0
+    - not ansible_check_mode or openvpn__bin.stat.exists
+  block:
+    # generated once so a crl always exists when crl-verify is enabled; the timer
+    # (and the revoke path below) keep it fresh thereafter.
+    - name: generate the certificate revocation list
+      ansible.builtin.command:
+        cmd: /usr/share/easy-rsa/easyrsa --batch gen-crl
+        chdir: "{{ openvpn_easyrsa_dir }}"
+        creates: "{{ openvpn_easyrsa_dir }}/pki/crl.pem"
+      environment:
+        EASYRSA_BATCH: "1"
+
+    - name: regenerate the certificate revocation list after revocation
+      ansible.builtin.command:
+        cmd: /usr/share/easy-rsa/easyrsa --batch gen-crl
+        chdir: "{{ openvpn_easyrsa_dir }}"
+      environment:
+        EASYRSA_BATCH: "1"
+      when: openvpn_revoke_these_certs | length > 0
+      changed_when: true
+
+    # copied out of the 0700 easyrsa dir so the daemon can re-read it after
+    # dropping privileges at runtime.
+    - name: publish the crl for the running server
+      ansible.builtin.copy:
+        remote_src: true
+        src: "{{ openvpn_easyrsa_dir }}/pki/crl.pem"
+        dest: "{{ openvpn_dir }}/crl.pem"
+        owner: root
+        group: root
+        mode: "0644"
+      notify: restart openvpn
+
+# a crl expires (easy-rsa default ~180 days); without renewal the server would
+# eventually reject every client. install a weekly timer that regenerates and
+# republishes it. kept separate so it is provisioned only when crl-verify is a
+# persistent feature, not for a one-off revoke.
+- name: install the crl renewal timer
+  when: openvpn_use_crl | bool
+  block:
+    - name: install the crl renewal script
+      ansible.builtin.template:
+        src: crl-renew.sh.j2
+        dest: "{{ openvpn_dir }}/crl-renew.sh"
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: deploy the crl renewal service
+      ansible.builtin.template:
+        src: openvpn-crl-renew.service.j2
+        dest: /etc/systemd/system/openvpn-crl-renew.service
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: deploy the crl renewal timer
+      ansible.builtin.template:
+        src: openvpn-crl-renew.timer.j2
+        dest: /etc/systemd/system/openvpn-crl-renew.timer
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: enable and start the crl renewal timer
+      ansible.builtin.systemd:
+        name: openvpn-crl-renew.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+      when: not ansible_check_mode or openvpn__bin.stat.exists

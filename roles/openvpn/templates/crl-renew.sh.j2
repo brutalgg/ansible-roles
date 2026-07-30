@@ -1,0 +1,8 @@
+#!/bin/sh
+# {{ ansible_managed }}
+# regenerate the openvpn crl before it expires and reload the running server.
+set -e
+cd {{ openvpn_easyrsa_dir }}
+EASYRSA_BATCH=1 /usr/share/easy-rsa/easyrsa --batch gen-crl
+install -m 0644 -o root -g root {{ openvpn_easyrsa_dir }}/pki/crl.pem {{ openvpn_dir }}/crl.pem
+systemctl reload-or-restart openvpn-server@{{ openvpn_instance }}.service

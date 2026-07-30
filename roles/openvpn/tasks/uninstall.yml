@@ -1,0 +1,58 @@
+---
+# out-of-band teardown — NOT imported by tasks/main.yml. reach it deliberately
+# from an operations playbook:
+#   - ansible.builtin.import_role:
+#       name: openvpn
+#       tasks_from: uninstall.yml
+# by default it removes the service, timer, config and packages but keeps the pki
+# so the CA survives; set openvpn_purge_pki to also wipe it.
+- name: detect the openvpn binary
+  ansible.builtin.stat:
+    path: /usr/sbin/openvpn
+  register: openvpn__bin
+  changed_when: false
+
+- name: stop and disable the openvpn server service
+  ansible.builtin.systemd:
+    name: "openvpn-server@{{ openvpn_instance }}"
+    enabled: false
+    state: stopped
+  when: not ansible_check_mode or openvpn__bin.stat.exists
+  failed_when: false
+
+- name: stop and disable the crl renewal timer
+  ansible.builtin.systemd:
+    name: openvpn-crl-renew.timer
+    enabled: false
+    state: stopped
+  when: not ansible_check_mode or openvpn__bin.stat.exists
+  failed_when: false
+
+- name: remove systemd units and helper files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/systemd/system/openvpn-crl-renew.timer
+    - /etc/systemd/system/openvpn-crl-renew.service
+    - "{{ openvpn_dir }}/crl-renew.sh"
+    - "{{ openvpn_server_config_dir }}/{{ openvpn_instance }}.conf"
+    - "/etc/logrotate.d/openvpn-{{ openvpn_instance }}"
+
+- name: reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: not ansible_check_mode or openvpn__bin.stat.exists
+
+- name: remove the easy-rsa pki
+  ansible.builtin.file:
+    path: "{{ openvpn_easyrsa_dir }}"
+    state: absent
+  when: openvpn_purge_pki | bool
+
+- name: uninstall the openvpn packages
+  ansible.builtin.apt:
+    name: "{{ openvpn_packages }}"
+    state: absent
+    purge: true
+  when: openvpn_uninstall_packages | bool

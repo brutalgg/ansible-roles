@@ -35,29 +35,3 @@
     - openvpn__index.content | default('') | b64decode | regex_search('(?m)^V.*/CN=' + (item | regex_escape) + '$')
   changed_when: true
   notify: restart openvpn
-
-- name: regenerate the certificate revocation list
-  ansible.builtin.command:
-    cmd: /usr/share/easy-rsa/easyrsa --batch gen-crl
-    chdir: "{{ openvpn_easyrsa_dir }}"
-  environment:
-    EASYRSA_BATCH: "1"
-  when:
-    - openvpn_revoke_these_certs | length > 0
-    - not ansible_check_mode or openvpn__bin.stat.exists
-  changed_when: true
-
-# copied out of the 0700 easyrsa dir so the daemon can re-read it after dropping
-# to the nobody user at runtime.
-- name: publish the crl for the running server
-  ansible.builtin.copy:
-    remote_src: true
-    src: "{{ openvpn_easyrsa_dir }}/pki/crl.pem"
-    dest: "{{ openvpn_dir }}/crl.pem"
-    owner: root
-    group: root
-    mode: "0644"
-  when:
-    - openvpn_revoke_these_certs | length > 0
-    - not ansible_check_mode or openvpn__bin.stat.exists
-  notify: restart openvpn

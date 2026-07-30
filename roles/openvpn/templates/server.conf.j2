@@ -1,5 +1,8 @@
 # {{ ansible_managed }}
 # openvpn server — {{ openvpn_instance }}
+{% if openvpn_local | length > 0 %}
+local {{ openvpn_local }}
+{% endif %}
 port {{ openvpn_port }}
 proto {{ openvpn_proto }}
 dev {{ openvpn_dev }}
@@ -11,13 +14,16 @@ dh {{ openvpn_easyrsa_dir }}/pki/dh.pem
 {% if openvpn_tls_auth %}
 tls-auth {{ openvpn_dir }}/ta.key 0
 {% endif %}
-{% if openvpn_revoke_these_certs | length > 0 %}
+{% if openvpn_use_crl | bool or openvpn_revoke_these_certs | length > 0 %}
 crl-verify {{ openvpn_dir }}/crl.pem
 {% endif %}
 
 topology subnet
 server {{ openvpn_server_network }} {{ openvpn_server_netmask }}
 ifconfig-pool-persist {{ openvpn_log_dir }}/ipp.txt
+{% if openvpn_client_config %}
+client-config-dir {{ openvpn_dir }}/{{ openvpn_client_config_dir }}
+{% endif %}
 {% if openvpn_redirect_gateway %}
 push "redirect-gateway def1 bypass-dhcp"
 {% endif %}
@@ -32,16 +38,23 @@ push "{{ line }}"
 {% if openvpn_client_to_client %}
 client-to-client
 {% endif %}
+{% if openvpn_duplicate_cn %}
+duplicate-cn
+{% endif %}
 keepalive {{ openvpn_keepalive }}
 {% if openvpn_compression | length > 0 %}
 compress {{ openvpn_compression }}
 push "compress {{ openvpn_compression }}"
 {% endif %}
 max-clients {{ openvpn_max_clients }}
-user nobody
-group nogroup
+user {{ openvpn_service_user }}
+group {{ openvpn_service_group }}
 persist-key
 persist-tun
+{% if openvpn_tun_mtu | length > 0 %}
+tun-mtu {{ openvpn_tun_mtu }}
+{% endif %}
+tls-server
 {% if openvpn_cipher | length > 0 %}
 cipher {{ openvpn_cipher }}
 data-ciphers {{ openvpn_cipher }}
@@ -52,8 +65,42 @@ auth {{ openvpn_auth_digest }}
 {% if openvpn_tls_version_min | length > 0 %}
 tls-version-min {{ openvpn_tls_version_min }}
 {% endif %}
+{% if openvpn_tls_cipher | length > 0 %}
+tls-cipher {{ openvpn_tls_cipher }}
+{% endif %}
+{% if openvpn_tls_ciphersuites | length > 0 %}
+tls-ciphersuites {{ openvpn_tls_ciphersuites }}
+{% endif %}
+{% if openvpn_verify_cn %}
+remote-cert-tls client
+{% endif %}
 {% if openvpn_proto.startswith('udp') %}
 explicit-exit-notify 1
 {% endif %}
+{% if openvpn_enable_management %}
+management {{ openvpn_management_bind }}
+{% if openvpn_management_client_user | length > 0 %}
+management-client-user {{ openvpn_management_client_user }}
+{% endif %}
+{% endif %}
+script-security {{ openvpn_script_security }}
+{% if openvpn_script_up | length > 0 %}
+up {{ openvpn_dir }}/up.sh
+{% endif %}
+{% if openvpn_script_down | length > 0 %}
+down {{ openvpn_dir }}/down.sh
+{% endif %}
+{% if openvpn_script_client_connect | length > 0 %}
+client-connect {{ openvpn_dir }}/client-connect.sh
+{% endif %}
+{% if openvpn_script_client_disconnect | length > 0 %}
+client-disconnect {{ openvpn_dir }}/client-disconnect.sh
+{% endif %}
 status {{ openvpn_log_dir }}/status.log
+{% if openvpn_status_version | length > 0 %}
+status-version {{ openvpn_status_version }}
+{% endif %}
+{% if openvpn_log_append %}
+log-append {{ openvpn_log_dir }}/{{ openvpn_log_file }}
+{% endif %}
 verb 3

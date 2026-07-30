@@ -1,16 +1,18 @@
 ---
 # openvpn — a routed (tun) OpenVPN server with an easy-rsa PKI. the role issues a
 # CA, a server cert, and one cert per client, renders the server config, and (when
-# openvpn_sync_certs) writes inline .ovpn profiles and fetches them back to the
+# openvpn_client_profiles) writes inline .ovpn profiles and fetches them back to the
 # controller. PKI material is generated when absent and reused when already present
 # (on-disk from a prior run, or supplied via the *_content vars below) — so nothing
 # secret ships inside this shared role.
 
-# --- drop-in compatibility --------------------------------------------------
-# canonical list of client names to issue certs/profiles for. defaults to the
-# unprefixed `clients` var so playbooks written against the common
-# ansible-role-openvpn interface work unchanged; set openvpn_clients directly to
-# stay fully namespaced.
+# --- clients ----------------------------------------------------------------
+# canonical list of client names to issue certs/profiles for. as a convenience it
+# falls back to a bare `clients` var, but this role's interface is otherwise fully
+# namespaced (openvpn_*) and is NOT drop-in compatible with the older
+# ansible-role-openvpn variable names (openvpn_auth_alg, openvpn_rsa_bits,
+# openvpn_keepalive_ping/_timeout, tls_auth_required, …). set openvpn_clients
+# directly to stay fully namespaced.
 openvpn_clients: "{{ clients | default([]) }}"
 
 # --- server identity --------------------------------------------------------
@@ -20,6 +22,8 @@ openvpn_port: "1194"
 openvpn_proto: "udp"                 # udp | tcp
 openvpn_dev: "tun"                   # tun (routed) — tap (bridged) not managed here
 openvpn_instance: "server"           # config basename + openvpn-server@<instance> unit
+# bind the daemon to a single local address ("" = listen on all — the default).
+openvpn_local: ""
 
 # --- paths ------------------------------------------------------------------
 openvpn_dir: "/etc/openvpn"
@@ -33,6 +37,7 @@ openvpn_server_netmask: "255.255.255.0"  # `server` directive netmask
 openvpn_server_subnet: "10.9.0.0/24"     # same range in cidr form, for the nat rule
 openvpn_redirect_gateway: true           # push a default route through the vpn
 openvpn_client_to_client: false          # let clients reach each other
+openvpn_duplicate_cn: false              # allow multiple clients to share one cert/CN
 openvpn_max_clients: 100
 openvpn_keepalive: "10 120"
 
@@ -53,21 +58,83 @@ openvpn_cipher: "AES-256-GCM"        # data-channel cipher ("" omits the lines)
 openvpn_auth_digest: "SHA256"        # hmac digest ("" omits the line)
 openvpn_tls_version_min: "1.2"       # minimum tls version ("" omits the line)
 
+# control-channel hardening. pin the tls control-channel cipher list ("" omits the
+# line — leave empty unless you must constrain it, as a bad list breaks handshakes).
+openvpn_tls_cipher: ""               # tls-cipher (pre-1.3 suites)
+openvpn_tls_ciphersuites: ""         # tls-ciphersuites (tls 1.3 suites)
+# verify the peer certificate common name: server checks clients carry the client
+# EKU (remote-cert-tls client), client checks it is talking to the server CN.
+openvpn_verify_cn: false
+
 # compression. "" disables it (recommended — compression is a security risk);
 # set "lz4-v2" or "lzo" only if you must interoperate with old clients.
 openvpn_compression: ""
 
+# tunnel mtu ("" leaves openvpn's default).
+openvpn_tun_mtu: ""
+
+# --- service accounts -------------------------------------------------------
+# the daemon drops to this user/group after start.
+openvpn_service_user: "nobody"
+openvpn_service_group: "nogroup"
+
 # --- nat / forwarding -------------------------------------------------------
-# enable ipv4 forwarding (persistent) and a POSTROUTING MASQUERADE so clients
-# reach the internet. the masquerade rule is applied idempotently but is NOT
-# persisted across reboots here — pair with the firewall role / netfilter-persistent
-# if you need it to survive a reboot.
+# enable ipv4 forwarding (persistent) plus a POSTROUTING MASQUERADE and FORWARD
+# accept rules on the tun interface so clients reach the internet. these netfilter
+# rules are applied idempotently but are NOT persisted across reboots here, and if
+# ufw manages the host its DEFAULT_FORWARD_POLICY still governs the FORWARD chain —
+# pair with the firewall role / netfilter-persistent for a durable setup.
 openvpn_nat: true
 openvpn_nat_interface: "{{ ansible_default_ipv4.interface | default('eth0') }}"
 
 # --- service ----------------------------------------------------------------
 openvpn_service_enabled: true
 openvpn_service_state: "started"     # started | stopped
+
+# --- management interface ---------------------------------------------------
+# expose openvpn's management socket for status/control tooling.
+openvpn_enable_management: false
+openvpn_management_bind: "/run/openvpn/management unix"
+openvpn_management_client_user: "root"
+
+# --- connect/disconnect scripts ---------------------------------------------
+# absolute paths (on the controller) to hook scripts copied to the server and
+# wired into the config ("" = not installed). script hooks only run when
+# openvpn_script_security is raised to "2".
+openvpn_script_security: "1"
+openvpn_script_up: ""
+openvpn_script_down: ""
+openvpn_script_client_connect: ""
+openvpn_script_client_disconnect: ""
+
+# --- per-client config (ccd) ------------------------------------------------
+# push per-client settings via client-config-dir. keys are client names, values a
+# list of raw ccd lines (ifconfig-push, iroute, per-client push, …). undeclared
+# files in the ccd are pruned; the whole dir is removed when disabled.
+openvpn_client_config: false
+openvpn_client_config_dir: "ccd"
+openvpn_client_configs: {}
+# example:
+# openvpn_client_configs:
+#   alice:
+#     - "ifconfig-push 10.9.0.5 255.255.255.0"
+#     - "iroute 192.168.4.0 255.255.255.0"
+#     - 'push "route 192.168.4.0 255.255.255.0"'
+
+# --- logging ----------------------------------------------------------------
+# by default the daemon logs to the journal and only writes a status file. set
+# openvpn_log_append to also log-append to a file and install a logrotate policy.
+openvpn_log_append: false
+openvpn_log_file: "openvpn.log"
+openvpn_status_version: ""            # status-version N ("" omits the line)
+openvpn_logrotate_config: |
+  rotate 4
+  weekly
+  missingok
+  notifempty
+  sharedscripts
+  copytruncate
+  delaycompress
 
 # --- supplied pki material (optional) ---------------------------------------
 # provide any of these as inline PEM (e.g. from vault) to reuse an existing CA /
@@ -78,18 +145,35 @@ openvpn_ca_key_content: ""
 openvpn_tls_auth_key_content: ""
 openvpn_dh_params_content: ""
 
-# --- client profile fetch ---------------------------------------------------
-# write inline .ovpn profiles on the server and pull them back to the controller.
-openvpn_sync_certs: false
+# --- client profile generation ----------------------------------------------
+# render inline .ovpn profiles on the server and (optionally) pull them back to
+# the controller. NOTE: this is profile *generation* only — it is unrelated to the
+# old ansible-role-openvpn `openvpn_sync_certs`, which auto-revoked drifted certs.
+# that behaviour is intentionally not implemented; revoke explicitly instead
+# (openvpn_revoke_these_certs).
+openvpn_client_profiles: false
 openvpn_fetch_client_configs: true
 openvpn_fetch_client_configs_dir: "./fetched_client_configs"
 
 # --- revocation -------------------------------------------------------------
-# client names to revoke; the role revokes only certs still valid, regenerates
-# the CRL, and turns on crl-verify.
+# turn on persistent crl verification (crl-verify) and a weekly systemd timer that
+# regenerates the crl before it expires. once you have revoked anything, keep this
+# true — an expired crl makes openvpn reject every client.
+openvpn_use_crl: false
+openvpn_crl_renew_schedule: "weekly"     # systemd OnCalendar expression
+openvpn_crl_renew_randomize: "1h"        # RandomizedDelaySec
+
+# client names to revoke; the role revokes only certs still valid, regenerates the
+# crl, and turns on crl-verify. set openvpn_use_crl so the crl keeps renewing.
 openvpn_revoke_these_certs: []
 
 # --- packages ---------------------------------------------------------------
 openvpn_packages:
   - openvpn
   - easy-rsa
+
+# --- teardown (uninstall.yml, out of band) ----------------------------------
+# read only by the out-of-band uninstall.yml (never imported by main.yml). run it
+# deliberately: import_role with tasks_from: uninstall.yml.
+openvpn_uninstall_packages: true     # apt purge the openvpn packages
+openvpn_purge_pki: false             # also delete the easy-rsa dir (loses the CA)

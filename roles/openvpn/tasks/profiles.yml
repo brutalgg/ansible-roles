@@ -1,7 +1,7 @@
 ---
 - name: render and fetch client profiles
   when:
-    - openvpn_sync_certs | bool
+    - openvpn_client_profiles | bool
     - openvpn_clients | length > 0
     - not ansible_check_mode or openvpn__bin.stat.exists
   block:

@@ -1,0 +1,5 @@
+# {{ ansible_managed }}
+# client-config-dir entry — {{ item.key }}
+{% for line in item.value %}
+{{ line }}
+{% endfor %}

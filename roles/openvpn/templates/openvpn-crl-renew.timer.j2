@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Periodic OpenVPN CRL renewal
+
+[Timer]
+OnCalendar={{ openvpn_crl_renew_schedule }}
+RandomizedDelaySec={{ openvpn_crl_renew_randomize }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

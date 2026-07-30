@@ -1,0 +1,7 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Regenerate the OpenVPN certificate revocation list
+
+[Service]
+Type=oneshot
+ExecStart={{ openvpn_dir }}/crl-renew.sh

@@ -7,14 +7,14 @@
     group: root
     mode: "0755"
 
-# owned by nobody:nogroup so the daemon can still write status.log / ipp.txt after
-# it drops privileges at runtime.
+# owned by the service account so the daemon can still write status.log / ipp.txt
+# after it drops privileges at runtime.
 - name: create the openvpn log directory
   ansible.builtin.file:
     path: "{{ openvpn_log_dir }}"
     state: directory
-    owner: nobody
-    group: nogroup
+    owner: "{{ openvpn_service_user }}"
+    group: "{{ openvpn_service_group }}"
     mode: "0750"
 
 - name: enable ipv4 forwarding
@@ -34,6 +34,105 @@
     jump: MASQUERADE
     comment: "openvpn client nat"
   when: openvpn_nat | bool
+
+# accept forwarded traffic to/from the tunnel explicitly, so the vpn routes even
+# where the host's default FORWARD policy (e.g. ufw's) is DROP.
+- name: accept forwarding out of the vpn tunnel
+  ansible.builtin.iptables:
+    chain: FORWARD
+    in_interface: "{{ openvpn_dev }}+"
+    jump: ACCEPT
+    comment: "openvpn vpn forward out"
+  when: openvpn_nat | bool
+
+- name: accept forwarding back to the vpn tunnel
+  ansible.builtin.iptables:
+    chain: FORWARD
+    out_interface: "{{ openvpn_dev }}+"
+    jump: ACCEPT
+    comment: "openvpn vpn forward return"
+  when: openvpn_nat | bool
+
+- name: install connect/disconnect hook scripts
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ openvpn_dir }}/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - { src: "{{ openvpn_script_up }}", dest: "up.sh" }
+    - { src: "{{ openvpn_script_down }}", dest: "down.sh" }
+    - { src: "{{ openvpn_script_client_connect }}", dest: "client-connect.sh" }
+    - { src: "{{ openvpn_script_client_disconnect }}", dest: "client-disconnect.sh" }
+  loop_control:
+    label: "{{ item.dest }}"
+  when: item.src | length > 0
+  notify: restart openvpn
+
+- name: ensure the management socket directory exists
+  ansible.builtin.file:
+    path: "{{ (openvpn_management_bind.split() | first) | dirname }}"
+    state: directory
+    mode: "0755"
+  when:
+    - openvpn_enable_management | bool
+    - openvpn_management_bind.split() | last == "unix"
+
+- name: create the client-config-dir
+  ansible.builtin.file:
+    path: "{{ openvpn_dir }}/{{ openvpn_client_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: openvpn_client_config | bool
+
+- name: render per-client config files
+  ansible.builtin.template:
+    src: client_ccd.j2
+    dest: "{{ openvpn_dir }}/{{ openvpn_client_config_dir }}/{{ item.key }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ openvpn_client_configs | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: openvpn_client_config | bool
+  notify: restart openvpn
+
+- name: find existing client-config-dir entries
+  ansible.builtin.find:
+    paths: "{{ openvpn_dir }}/{{ openvpn_client_config_dir }}"
+  register: openvpn__ccd_existing
+  when: openvpn_client_config | bool
+  changed_when: false
+
+- name: prune undeclared client-config-dir entries
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ openvpn__ccd_existing.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  when:
+    - openvpn_client_config | bool
+    - (item.path | basename) not in (openvpn_client_configs.keys() | list)
+
+- name: remove the client-config-dir when disabled
+  ansible.builtin.file:
+    path: "{{ openvpn_dir }}/{{ openvpn_client_config_dir }}"
+    state: absent
+  when: not (openvpn_client_config | bool)
+
+- name: install the openvpn logrotate policy
+  ansible.builtin.template:
+    src: openvpn_logrotate.conf.j2
+    dest: "/etc/logrotate.d/openvpn-{{ openvpn_instance }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: openvpn_log_append | bool
 
 - name: render the server configuration
   ansible.builtin.template:
