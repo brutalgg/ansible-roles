@@ -9,6 +9,10 @@ base_timezone: UTC
 base_apt_mirror: http://deb.debian.org/debian
 base_apt_security_mirror: http://security.debian.org/debian-security
 base_apt_dietpi_mirror: https://dietpi.com/apt
+# how long (seconds) a refreshed apt cache is considered valid — the cache
+# update is skipped (and stays green, not "changed") while it is younger than
+# this. default 1 day. set to 0 to force a refresh on every run.
+base_apt_cache_valid_time: 86400
 
 # sshd hardening (applied only when sshd is present). defaults stay hardened;
 # a bootstrap/console-less host can relax them via group_vars.

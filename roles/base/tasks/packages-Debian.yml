@@ -65,7 +65,7 @@
 - name: update apt cache
   ansible.builtin.apt:
     update_cache: true
-    cache_valid_time: 86400
+    cache_valid_time: "{{ base_apt_cache_valid_time }}"
 
 - name: ensure extra packages present
   ansible.builtin.package:
