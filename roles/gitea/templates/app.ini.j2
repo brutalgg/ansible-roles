@@ -83,6 +83,8 @@ DISABLE_REGISTRATION = {{ gitea_disable_registration | ternary('true', 'false') 
 REQUIRE_SIGNIN_VIEW = {{ gitea_require_signin_view | ternary('true', 'false') }}
 REGISTER_EMAIL_CONFIRM = false
 REGISTER_MANUAL_CONFIRM = {{ gitea_register_manual_confirm | ternary('true', 'false') }}
+ALLOW_ONLY_INTERNAL_REGISTRATION = {{ gitea_allow_only_internal_registration | ternary('true', 'false') }}
+ALLOW_ONLY_EXTERNAL_REGISTRATION = {{ gitea_allow_only_external_registration | ternary('true', 'false') }}
 ENABLE_NOTIFY_MAIL = {{ gitea_mailer_enabled | ternary('true', 'false') }}
 ENABLE_CAPTCHA = {{ gitea_enable_captcha | ternary('true', 'false') }}
 DEFAULT_KEEP_EMAIL_PRIVATE = {{ gitea_default_keep_email_private | ternary('true', 'false') }}
@@ -109,8 +111,8 @@ FORCE_TRUST_SERVER_CERT = {{ gitea_mailer_force_trust_server_cert | ternary('tru
 {% endif %}
 
 [openid]
-ENABLE_OPENID_SIGNIN = false
-ENABLE_OPENID_SIGNUP = false
+ENABLE_OPENID_SIGNIN = {{ gitea_enable_openid_signin | ternary('true', 'false') }}
+ENABLE_OPENID_SIGNUP = {{ gitea_enable_openid_signup | ternary('true', 'false') }}
 
 [oauth2]
 JWT_SECRET = {{ gitea_jwt_secret }}

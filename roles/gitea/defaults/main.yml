@@ -109,6 +109,14 @@ gitea_default_org_visibility: public
 gitea_no_reply_address: "noreply.localhost"
 # restrict sign-up to these email domains. empty list = no restriction.
 gitea_email_domain_allowlist: []
+# restrict registration to internal (local) or external (oauth/openid) only.
+# both false (default) = Gitea's built-in behaviour, no restriction.
+gitea_allow_only_internal_registration: false
+gitea_allow_only_external_registration: false
+
+# --- openid ---
+gitea_enable_openid_signin: false
+gitea_enable_openid_signup: false
 
 # --- repository ---
 # force new repos private by default. empty = leave gitea's default (false).
