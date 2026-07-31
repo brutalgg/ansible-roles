@@ -21,6 +21,20 @@ services:
       # .runner registration state persists here (config.yaml's runner.file points
       # at {{ act_runner_runner_file }}, inside this mounted home).
       - runner:{{ act_runner_home }}
+{% if act_runner_container_networks | length > 0 %}
+    networks:
+{% for network in act_runner_container_networks %}
+      - {{ network }}
+{% endfor %}
+{% endif %}
 
 volumes:
   runner:
+{% if act_runner_container_networks | length > 0 %}
+
+networks:
+{% for network in act_runner_container_networks %}
+  {{ network }}:
+    external: true
+{% endfor %}
+{% endif %}

@@ -115,3 +115,10 @@ caddy_image_has_dns_plugins: false
 # (e.g. "/srv/www:/srv/www:ro"). site roots (caddy_sites[].root) are bind-mounted
 # automatically; use this for anything else the container needs.
 caddy_container_extra_volumes: []
+# pre-existing EXTERNAL docker networks to attach the caddy service to, so caddy
+# can reverse_proxy sibling compose projects by service name over a shared network
+# (e.g. `reverse_proxy server:3000` to the `gitea` role) instead of via
+# host-published ports. the network(s) must already exist (the consumer creates
+# them); this role only joins them and declares them external. empty (default)
+# renders no networks — byte-identical to today's single-project compose.
+caddy_container_networks: []

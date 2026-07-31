@@ -26,7 +26,21 @@ services:
 {% for volume in caddy_container_extra_volumes %}
       - {{ volume }}
 {% endfor %}
+{% if caddy_container_networks | length > 0 %}
+    networks:
+{% for network in caddy_container_networks %}
+      - {{ network }}
+{% endfor %}
+{% endif %}
 
 volumes:
   caddy_data:
   caddy_config:
+{% if caddy_container_networks | length > 0 %}
+
+networks:
+{% for network in caddy_container_networks %}
+  {{ network }}:
+    external: true
+{% endfor %}
+{% endif %}

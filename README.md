@@ -177,7 +177,8 @@ the new mode.
 Required: `act_runner_gitea_instance_url`, `act_runner_token` (**vault**).
 Key: `act_runner_version`, `act_runner_install_mode` (`native`|`container`),
 `act_runner_config_type` (`host`|`container`), `act_runner_image`,
-`act_runner_compose_dir`.
+`act_runner_compose_dir`, `act_runner_container_networks` (join pre-existing
+external docker networks to reach gitea by service name).
 
 ### `autorestic` — Restic backups
 Restic + autorestic with systemd timers and NFS handling (managed on VMs,
@@ -200,7 +201,8 @@ Switching an already-provisioned host between modes: run the out-of-band
 `caddy_teardown_purge` for a full wipe), then provision the new mode.
 Key: `caddy_enabled`, `caddy_install_mode`, `caddy_sites`
 (domain / upstream|root / tls per entry), `caddy_le_staging`, `caddy_resolvers`,
-`caddy_image`, `caddy_compose_dir`.
+`caddy_image`, `caddy_compose_dir`, `caddy_container_networks` (join pre-existing
+external docker networks, e.g. to `reverse_proxy server:3000` a sibling stack).
 
 ### `gitea` — self-hosted git host
 Compose stack (gitea + its own postgres). **Standalone by default**: reachable
@@ -215,7 +217,8 @@ Required (**vault**): `gitea_postgres_password`, `gitea_secret_key`,
 Key: `gitea_domain`, `gitea_version`, `gitea_uid`/`gitea_gid`, `gitea_http_bind`,
 `gitea_tls_enabled` (+ `gitea_tls_cert`/`_key`), `gitea_postgres_data_dir`
 (pg18 → `/var/lib/postgresql`), `gitea_data_bind`/`_volume_opts` (host path or NFS),
-`gitea_extra_config`.
+`gitea_container_networks` (join pre-existing external docker networks so siblings
+reach `server`/`db` by name), `gitea_extra_config`.
 
 ### `openvpn` — OpenVPN server
 Routed (`tun`) OpenVPN **server** with a self-contained easy-rsa PKI: issues a CA,

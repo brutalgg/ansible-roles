@@ -39,6 +39,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
+{% if gitea_container_networks | length > 0 %}
+    networks:
+{% for network in gitea_container_networks %}
+      - {{ network }}
+{% endfor %}
+{% endif %}
 
   db:
     image: {{ gitea_postgres_image }}
@@ -55,6 +61,12 @@ services:
       start_period: 10s
     volumes:
       - postgres:{{ gitea_postgres_data_dir }}
+{% if gitea_container_networks | length > 0 %}
+    networks:
+{% for network in gitea_container_networks %}
+      - {{ network }}
+{% endfor %}
+{% endif %}
 
 volumes:
 {% if gitea_data_bind | length == 0 %}
@@ -71,5 +83,13 @@ volumes:
     driver_opts:
 {% for key, value in gitea_postgres_volume_opts.items() %}
       {{ key }}: "{{ value }}"
+{% endfor %}
+{% endif %}
+{% if gitea_container_networks | length > 0 %}
+
+networks:
+{% for network in gitea_container_networks %}
+  {{ network }}:
+    external: true
 {% endfor %}
 {% endif %}

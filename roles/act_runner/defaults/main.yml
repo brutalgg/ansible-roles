@@ -47,6 +47,15 @@ act_runner_compose_dir: /opt/stacks/act_runner
 # false pulls only when the pinned tag is absent locally. deliberate upgrades live
 # in update.yml (run out of band).
 act_runner_image_force_pull: false
+# pre-existing EXTERNAL docker networks to attach the runner service to, so the
+# runner can reach gitea by service name over a shared network (e.g. dial the
+# `gitea` role's `server` service) instead of via a host-published port. the
+# network(s) must already exist (the consumer creates them); this role only joins
+# them and declares them external. empty (default) renders no networks —
+# byte-identical to today's single-project compose. NOTE this attaches the runner
+# container itself; the network(s) CI job containers may join is a separate
+# concern (see act_runner_container_network in the config below).
+act_runner_container_networks: []
 
 # execution backend: host (run jobs directly on the host) or container (run jobs
 # in docker). drives container.enabled in the rendered config and whether the

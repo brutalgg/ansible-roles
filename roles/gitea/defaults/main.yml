@@ -28,6 +28,17 @@ gitea_gid: "1000"
 # never silently upgrades the image; update.yml sets it true (docs/STANDARDS.md §2.1).
 gitea_force_pull: false
 
+# --- shared docker networks ---
+# pre-existing EXTERNAL docker networks to attach the server + db services to, so
+# sibling compose projects (e.g. the `caddy` and `act_runner` roles) can reach
+# gitea by service name over a shared network — caddy can reverse_proxy the
+# `server` service and a runner can dial gitea by name, no host-published ports
+# needed. the network(s) must already exist (the consumer creates them, e.g. with
+# community.docker.docker_network or `docker network create`); this role only
+# joins them and declares them external. empty (default) renders no networks —
+# byte-identical to a single-project standalone deployment.
+gitea_container_networks: []
+
 # --- identity / urls ---
 gitea_app_name: "Gitea"
 # public hostname gitea is reached at. drives ROOT_URL/DOMAIN/SSH_DOMAIN.
