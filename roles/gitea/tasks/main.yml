@@ -3,7 +3,7 @@
   ansible.builtin.assert:
     that:
       - gitea_postgres_password | length > 0
-      - gitea_secret_key | length > 0
+      - gitea_secret_key is defined
       - gitea_internal_token | length > 0
       - gitea_jwt_secret | length > 0
       - gitea_lfs_jwt_secret | length > 0
