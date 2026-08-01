@@ -1,0 +1,48 @@
+---
+# on/off guard, set true by the consumer (control repo group_vars) — same
+# pattern as caddy_enabled. the role does nothing while false.
+nfs_mount_enabled: false
+
+# the NFS mounts to establish, as a list of mappings — each entry is one share:
+#   src:  nfs source (server:/export/path)         REQUIRED
+#   path: local mountpoint                          REQUIRED
+#   opts: mount options for this entry              OPTIONAL (default below)
+# there are no credentials: nfs auth is the server-side export rule for this
+# host's ip. make sure every export exists — and its files are readable (and,
+# for a read-write entry, writable) by this host's consumers — before the role
+# runs. an entry that omits `opts` inherits nfs_mount_default_opts.
+nfs_mounts: []
+
+# default mount options, applied to any entry that does not set its own `opts`.
+# tuned for a read-only, read-mostly share (e.g. media); a read-write consumer
+# (e.g. a backup target) sets its own `opts` per entry — drop `ro`, and prefer
+# the default `hard` over `soft` so a write is never silently dropped on a
+# timeout.
+# - ro: read-only; writes happen elsewhere.
+# - soft,timeo=100,retrans=3: fail an operation after a few retries instead
+#   of hanging forever when the server is away — right for read-mostly
+#   media, wrong for databases or backups (use hard there).
+# - _netdev,nofail: wait for the network, and don't block boot when the
+#   server is down (consumers that must not start without the mount should
+#   order themselves after it, e.g. RequiresMountsFor).
+# - x-systemd.automount: establish the mount on first access instead of one
+#   boot-time attempt. with plain nofail a mount that fails at boot stays
+#   dead until someone runs mount by hand; the automount re-triggers on the
+#   next access, and anything ordered on this path (RequiresMountsFor,
+#   stacked mounts) blocks until the real mount is up rather than racing it.
+nfs_mount_default_opts: "_netdev,nofail,noatime,ro,soft,timeo=100,retrans=3,x-systemd.automount"
+
+# whether to make network-online.target truthful for boot-time mounts.
+# _netdev orders a mount after network-online.target, but stock images often
+# reach that target before the nic has an address, so the mount dies at boot
+# with "network is unreachable". the role probes which network manager is
+# active and fixes the matching gap:
+# - systemd-networkd: enable systemd-networkd-wait-online (images ship it
+#   disabled, leaving the target with no waiter).
+# - ifupdown (debian networking.service): promote the default-route
+#   interface from `allow-hotplug` to `auto` in /etc/network/interfaces —
+#   only `auto` interfaces are raised synchronously before
+#   network-online.target; allow-hotplug ones come up via udev after it has
+#   already fired. (stanzas in interfaces.d are not touched — move the
+#   interface to the main file if yours lives there.)
+nfs_mount_manage_wait_online: true

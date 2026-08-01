@@ -1,0 +1,6 @@
+---
+- name: import nfs mount tasks
+  ansible.builtin.import_tasks: mount.yml
+  tags:
+    - nfs_mount
+  when: nfs_mount_enabled | bool

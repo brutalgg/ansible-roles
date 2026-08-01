@@ -220,6 +220,34 @@ Key: `gitea_domain`, `gitea_version`, `gitea_uid`/`gitea_gid`, `gitea_http_bind`
 `gitea_container_networks` (join pre-existing external docker networks so siblings
 reach `server`/`db` by name), `gitea_extra_config`.
 
+### `nfs_mount` — NFS client mounts
+Mounts a list of NFS shares in the guest and keeps `/etc/fstab` in step. No
+credentials — auth is the server-side export rule for this host's IP, so every
+export must already exist and be readable (writable, for a rw entry) by this host
+before the role runs. Each entry that omits `opts` inherits `nfs_mount_default_opts`,
+tuned for a read-mostly share (`ro`, `soft`, `x-systemd.automount`); a read-write
+consumer (e.g. a backup target) sets its own `opts` per entry (drop `ro`, prefer
+`hard`). Also makes `network-online.target` truthful so `_netdev` ordering actually
+holds at boot — it probes the active network manager and fixes the matching gap
+(systemd-networkd: enable `systemd-networkd-wait-online`; ifupdown: promote the
+default-route interface from `allow-hotplug` to `auto`). Requires gathered facts
+for the interface name.
+
+| Variable | Default | Notes |
+|---|---|---|
+| `nfs_mount_enabled` | `false` | Master switch (caddy pattern); `false` no-ops the role. |
+| `nfs_mounts` | `[]` | `[{src, path, opts?}]` — `src` is `server:/export/path`, `path` the local mountpoint; `opts` optional (inherits the default below). |
+| `nfs_mount_default_opts` | `_netdev,nofail,noatime,ro,soft,timeo=100,retrans=3,x-systemd.automount` | Applied to any entry without its own `opts`; read-mostly defaults. |
+| `nfs_mount_manage_wait_online` | `true` | Fix `network-online.target` for the active network manager so boot-time mounts don't race a dead nic. |
+
+Example:
+```yaml
+nfs_mount_enabled: true
+nfs_mounts:
+  - { src: "nas.example:/tank/media", path: "/mnt/media" }
+  - { src: "nas.example:/tank/backups", path: "/backups", opts: "_netdev,nofail,noatime,hard,x-systemd.automount" }
+```
+
 ### `openvpn` — OpenVPN server
 Routed (`tun`) OpenVPN **server** with a self-contained easy-rsa PKI: issues a CA,
 a server cert, and one cert per client, renders the server config, enables

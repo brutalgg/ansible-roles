@@ -1,0 +1,62 @@
+---
+- name: verify required nfs mount variables
+  ansible.builtin.assert:
+    that:
+      - nfs_mounts | length > 0
+      - nfs_mounts | rejectattr('src', 'defined') | list | length == 0
+      - nfs_mounts | rejectattr('path', 'defined') | list | length == 0
+    fail_msg: "nfs_mount requires a non-empty nfs_mounts list, each entry with src (server:/export/path) and path."
+
+- name: install nfs client
+  ansible.builtin.apt:
+    name: nfs-common
+    state: present
+
+# make network-online.target meaningful (see nfs_mount_manage_wait_online in
+# defaults). each branch is gated on its manager actually being active —
+# enabling a waiter for a manager that runs nothing would just stall boot.
+# this plumbing is host-wide, so it runs once ahead of the per-mount loop.
+- name: check whether systemd-networkd is active
+  ansible.builtin.command: systemctl is-active systemd-networkd
+  register: nfs_mount__networkd
+  changed_when: false
+  failed_when: false
+
+- name: enable systemd-networkd-wait-online
+  ansible.builtin.systemd:
+    name: systemd-networkd-wait-online
+    enabled: true
+  when:
+    - nfs_mount_manage_wait_online | bool
+    - nfs_mount__networkd.rc == 0
+
+- name: check whether ifupdown networking is active
+  ansible.builtin.command: systemctl is-active networking
+  register: nfs_mount__ifupdown
+  changed_when: false
+  failed_when: false
+
+# networking.service is Before=network-online.target but raises only `auto`
+# interfaces synchronously — an allow-hotplug interface is configured by udev
+# after the target fires, so boot-time mounts race a dead network. the regexp
+# matches both spellings, making the task a no-op once the stanza is `auto`.
+# takes effect at next boot; requires gathered facts for the interface name.
+- name: raise the primary interface at boot (auto, not allow-hotplug)
+  ansible.builtin.lineinfile:
+    path: /etc/network/interfaces
+    regexp: '^(auto|allow-hotplug) {{ ansible_facts.default_ipv4.interface }}$'
+    line: "auto {{ ansible_facts.default_ipv4.interface }}"
+  when:
+    - nfs_mount_manage_wait_online | bool
+    - nfs_mount__ifupdown.rc == 0
+    - ansible_facts.default_ipv4.interface is defined
+
+# one share per entry — the mountpoint/create/mount sequence has an inter-task
+# dependency (create only when unmounted), so it lives in its own file included
+# per entry rather than three parallel loops.
+- name: establish each nfs mount
+  ansible.builtin.include_tasks: mount_one.yml
+  loop: "{{ nfs_mounts }}"
+  loop_control:
+    loop_var: nfs_mount__entry
+    label: "{{ nfs_mount__entry.path | default('?') }}"

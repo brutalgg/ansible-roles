@@ -1,0 +1,30 @@
+---
+# per-entry: nfs_mount__entry is {src, path, opts?} from the nfs_mounts loop.
+
+# the mountpoint only needs to exist before the first mount — once the share
+# is mounted the path belongs to the remote fs, and enforcing a mode on it
+# would fail (e.g. EROFS on a read-only share). check_mode: false — read-only
+# probe that must also run in dry runs so the guarded task can evaluate.
+- name: check whether the share is already mounted
+  ansible.builtin.command: mountpoint -q {{ nfs_mount__entry.path }}
+  register: nfs_mount__mounted
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: create mountpoint
+  ansible.builtin.file:
+    path: "{{ nfs_mount__entry.path }}"
+    state: directory
+    mode: "0755"
+  when: nfs_mount__mounted.rc != 0
+
+# a changed fstab line (new options/source) does not re-mount an already
+# mounted share — remount manually or reboot to apply it live.
+- name: mount nfs share
+  ansible.posix.mount:
+    path: "{{ nfs_mount__entry.path }}"
+    src: "{{ nfs_mount__entry.src }}"
+    fstype: nfs
+    opts: "{{ nfs_mount__entry.opts | default(nfs_mount_default_opts) }}"
+    state: mounted
