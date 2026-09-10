@@ -8,10 +8,57 @@
     upgrade: safe
     autoremove: true
 
-- name: detect reboot required
+# reboot detection needs help on plain debian: /var/run/reboot-required is an
+# ubuntu mechanism (update-notifier-common's kernel hook) that nothing in
+# debian's own packages writes, so a kernel upgrade would never trip the
+# marker-file check below. needrestart's batch probe compares the running
+# kernel against the newest installed one and works across debian, ubuntu,
+# and the pi variants.
+- name: ensure needrestart is present for kernel-status detection
+  ansible.builtin.package:
+    name: needrestart
+    state: present
+
+# scope needrestart to the probe below: list-only mode stops its apt hook from
+# auto-restarting services on library upgrades — service restarts belong to
+# the owning roles' handlers, not a host-wide apt hook.
+- name: keep needrestart in list-only mode
+  ansible.builtin.copy:
+    content: |
+      # managed by the base role: list-only, so the apt hook never restarts
+      # services itself. service restarts belong to the owning roles.
+      $nrconf{restart} = 'l';
+    dest: /etc/needrestart/conf.d/50-base-list-only.conf
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: detect reboot required (marker file)
   ansible.builtin.stat:
     path: /var/run/reboot-required
   register: base__reboot_required_file
+
+# check-mode guard: on a --check run neither the upgrade nor the needrestart
+# install really happened, so skip the probe rather than fail on a missing
+# binary; the set_fact below defaults to "kernel current".
+- name: probe the kernel status with needrestart
+  ansible.builtin.command: needrestart -b
+  register: base__needrestart
+  changed_when: false
+  when: not ansible_check_mode
+
+# NEEDRESTART-KSTA: 1 = running kernel is current, 2 = ABI-compatible upgrade
+# pending, 3 = version upgrade pending, 0 = unknown (treated as current — a
+# host needrestart cannot judge should not reboot-loop).
+- name: note whether the running kernel is outdated
+  ansible.builtin.set_fact:
+    base__kernel_outdated: >-
+      {{ ((base__needrestart.stdout | default(''))
+          | regex_search('NEEDRESTART-KSTA: *(\d+)', '\1')
+          | default([], true)
+          | first
+          | default('1')
+          | int) > 1 }}
 
 # safe to reboot inline: playbooks/update.yml runs this play serial: 1, so only
 # one host (e.g. one of the HA dns pis) is ever down at a time.
@@ -23,4 +70,4 @@
     post_reboot_delay: 30
     test_command: uptime
     msg: rebooting after package upgrade
-  when: base__reboot_required_file.stat.exists
+  when: base__reboot_required_file.stat.exists or base__kernel_outdated

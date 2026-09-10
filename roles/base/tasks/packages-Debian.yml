@@ -47,17 +47,14 @@
     - not base__dietpi.stat.exists
     - not base__use_deb822
 
-# - name: Remove /etc/apt/sources.list for excluded releases
-#   ansible.builtin.file:
-#     path: /etc/apt/sources.list
-#     state: absent
-#   when: ansible_facts['distribution_release'] in excluded_apt_sources
-
-# - name: Remove /etc/apt/sources.list.d/debian.sources for excluded releases
-#   ansible.builtin.file:
-#     path: "/etc/apt/sources.list.d/debian.sources"
-#     state: absent
-#   when: ansible_facts['distribution_release'] in excluded_apt_sources
+# the deb822 file above fully replaces the classic list; leaving the
+# installer's sources.list in place makes every apt operation warn
+# "Target ... is configured multiple times"
+- name: remove the legacy sources.list on deb822 hosts
+  ansible.builtin.file:
+    path: /etc/apt/sources.list
+    state: absent
+  when: base__use_deb822
 
 # provisioning refreshes the cache and installs required packages but does NOT
 # upgrade versions or reboot — that is the deliberate, out-of-band update path
