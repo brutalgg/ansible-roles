@@ -1,1 +1,1 @@
-{{ {"data-root": docker_data_folder} | combine(docker_daemon_options) | to_nice_json }}
+{{ {"data-root": docker_data_folder, "live-restore": docker_live_restore | bool} | combine(docker_daemon_options) | to_nice_json }}

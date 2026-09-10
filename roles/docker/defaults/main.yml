@@ -15,9 +15,16 @@ docker_data_folder: /var/lib/docker/
 # create it 0710 to stay idempotent — 0755 drifts back to 0710 on every run.
 docker_data_folder_mode: "0710"
 
-# Extra daemon.json options merged over {"data-root": docker_data_folder}.
-# e.g. registry-mirrors / insecure-registries (internal registry), log-driver,
-# default-address-pools (avoid VLAN subnet clashes). a key here overrides data-root.
+# Containers keep running while dockerd is down. Docker upgrades ride the
+# fleet-wide apt run (see docker_packages below), where the deb's postinst
+# restarts the daemon — without live-restore that bounces every container on
+# every engine upgrade. Incompatible with swarm mode: disable there.
+docker_live_restore: true
+
+# Extra daemon.json options merged over the managed keys
+# ({"data-root": ..., "live-restore": ...}). e.g. registry-mirrors /
+# insecure-registries (internal registry), log-driver, default-address-pools
+# (avoid VLAN subnet clashes). a key here overrides the managed ones.
 docker_daemon_options: {}
 
 # docker package set, from https://docs.docker.com/engine/install/debian/.
