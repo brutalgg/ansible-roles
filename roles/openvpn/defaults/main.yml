@@ -17,7 +17,7 @@ openvpn_clients: "{{ clients | default([]) }}"
 
 # --- server identity --------------------------------------------------------
 # address clients dial (public ip or dns name) — baked into every .ovpn profile.
-openvpn_server_hostname: "{{ ansible_default_ipv4.address | default(ansible_fqdn) }}"
+openvpn_server_hostname: "{{ ansible_facts['default_ipv4']['address'] | default(ansible_facts['fqdn']) }}"
 openvpn_port: "1194"
 openvpn_proto: "udp"                 # udp | tcp
 openvpn_dev: "tun"                   # tun (routed) — tap (bridged) not managed here
@@ -85,7 +85,7 @@ openvpn_service_group: "nogroup"
 # ufw manages the host its DEFAULT_FORWARD_POLICY still governs the FORWARD chain —
 # pair with the firewall role / netfilter-persistent for a durable setup.
 openvpn_nat: true
-openvpn_nat_interface: "{{ ansible_default_ipv4.interface | default('eth0') }}"
+openvpn_nat_interface: "{{ ansible_facts['default_ipv4']['interface'] | default('eth0') }}"
 
 # --- service ----------------------------------------------------------------
 openvpn_service_enabled: true
