@@ -19,8 +19,6 @@
     mode: "0755"
   when: nfs_mount__mounted.rc != 0
 
-# a changed fstab line (new options/source) does not re-mount an already
-# mounted share — remount manually or reboot to apply it live.
 - name: mount nfs share
   ansible.posix.mount:
     path: "{{ nfs_mount__entry.path }}"
@@ -28,3 +26,36 @@
     fstype: nfs
     opts: "{{ nfs_mount__entry.opts | default(nfs_mount_default_opts) }}"
     state: mounted
+  register: nfs_mount__result
+
+# a changed fstab line on an already mounted share is not applied live: the
+# module's `mount -o remount` keeps the old nfs source, and the fstab-generated
+# systemd units still carry the old line until a daemon-reload. so cycle it:
+# reload first, so an automount can't re-trigger on the old source between the
+# unmount and the mount. the unmount fails (loudly) if something holds the path
+# — a stacked mount or an open file — which beats leaving the old share in place.
+- name: reload systemd so the fstab-generated mount units follow the new line
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when:
+    - nfs_mount__result is changed
+    - nfs_mount__mounted.rc == 0
+
+- name: unmount the share to apply the changed line
+  ansible.posix.mount:
+    path: "{{ nfs_mount__entry.path }}"
+    state: unmounted
+  when:
+    - nfs_mount__result is changed
+    - nfs_mount__mounted.rc == 0
+
+- name: mount the share again from the new line
+  ansible.posix.mount:
+    path: "{{ nfs_mount__entry.path }}"
+    src: "{{ nfs_mount__entry.src }}"
+    fstype: nfs
+    opts: "{{ nfs_mount__entry.opts | default(nfs_mount_default_opts) }}"
+    state: mounted
+  when:
+    - nfs_mount__result is changed
+    - nfs_mount__mounted.rc == 0
