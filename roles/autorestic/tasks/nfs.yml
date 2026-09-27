@@ -5,6 +5,8 @@
     state: present
   when: autorestic_nfs_managed
 
+# only the empty local mountpoint is root-owned; once the share is mounted the path
+# is the export root, and a squashed client can't chown it
 - name: create backup destination directory
   ansible.builtin.file:
     path: "{{ autorestic_dest_dir }}"
@@ -12,7 +14,9 @@
     owner: root
     group: root
     mode: "0755"
-  when: autorestic_nfs_managed
+  when:
+    - autorestic_nfs_managed
+    - autorestic_dest_dir not in (ansible_facts.mounts | default([]) | map(attribute='mount') | list)
 
 - name: add nfs entry to fstab
   ansible.builtin.lineinfile:

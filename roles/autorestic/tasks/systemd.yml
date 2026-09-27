@@ -15,14 +15,18 @@
     owner: root
     group: root
     mode: "0644"
+  register: autorestic_timer_unit
   notify: restart backup timer
 
 - name: reload systemd daemon
   ansible.builtin.systemd:
     daemon_reload: true
 
+# under --check the template above doesn't write the unit, so on a first run
+# systemd has nothing to enable; the real run and re-runs still validate it
 - name: enable and start backup timer
   ansible.builtin.systemd:
     name: backup.timer
     enabled: true
     state: started
+  when: not (ansible_check_mode and autorestic_timer_unit is changed)
