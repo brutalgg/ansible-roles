@@ -55,7 +55,16 @@ autorestic_config_dir: /opt/backup
 # restic repository encryption password
 autorestic_restic_password: ""
 
-# per-host list of services to back up (defined in host_vars)
+# per-host list of services to back up (defined in host_vars). each entry:
+#   name:          service / repo name                              REQUIRED
+#   paths:         host paths to back up                            OPTIONAL
+#   volumes:       docker named volumes to back up                  OPTIONAL
+#   compose_path:  stack directory; wraps the backup in compose     OPTIONAL
+#                  stop/start (failure hook always restarts)
+#   compose_file:  compose file name inside compose_path            OPTIONAL
+#                  (default docker-compose.yml; e.g. compose.yaml)
+#   pre_commands:  run before the stop (dumps while the app is up)  OPTIONAL
+#   post_commands: run after the start (cleanup)                    OPTIONAL
 autorestic_services: []
 
 # optional Discord webhook URL for backup notifications

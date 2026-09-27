@@ -37,7 +37,8 @@ get_repo_path() {
     grep -oP 'path:\s*\K\S+' "$CONFIG_FILE" | grep -E "/${service}\$" | head -1
 }
 
-get_compose_path() {
+# the compose file the backup hooks use (path + file name), read from the config
+get_compose_file() {
     local service="$1"
     local in_location=0
     local found_service=0
@@ -51,7 +52,7 @@ get_compose_path() {
             in_location=1
             continue
         fi
-        if [ $found_service -eq 1 ] && [[ "$line" =~ docker\ compose\ -f\ (.+)/docker-compose\.yml ]]; then
+        if [ $found_service -eq 1 ] && [[ "$line" =~ docker\ compose\ -f\ ([^[:space:]\']+)\ stop ]]; then
             echo "${BASH_REMATCH[1]}"
             return
         fi
@@ -125,9 +126,9 @@ cmd_restore() {
         esac
     done
 
-    local repo_path compose_path volumes
+    local repo_path compose_file volumes
     repo_path=$(get_repo_path "$service")
-    compose_path=$(get_compose_path "$service")
+    compose_file=$(get_compose_file "$service")
     read -ra volumes <<< "$(get_volumes "$service")"
 
     if [ ! -f "$repo_path/config" ]; then
@@ -143,7 +144,7 @@ cmd_restore() {
     log "  Service:   $service"
     log "  Snapshot:  $snapshot"
     log "  Volumes:   ${volumes[*]}"
-    log "  Compose:   $compose_path"
+    log "  Compose:   $compose_file"
     echo ""
 
     if [ "$skip_confirm" -ne 1 ]; then
@@ -158,10 +159,10 @@ cmd_restore() {
     timestamp=$(date +%Y%m%d-%H%M%S)
 
     log "Stopping service..."
-    if [ -n "$compose_path" ] && [ -f "$compose_path/docker-compose.yml" ]; then
-        docker compose -f "$compose_path/docker-compose.yml" stop --timeout 120
+    if [ -n "$compose_file" ] && [ -f "$compose_file" ]; then
+        docker compose -f "$compose_file" stop --timeout 120
     else
-        log "WARNING: Could not find compose path, skipping container stop"
+        log "WARNING: Could not find compose file, skipping container stop"
     fi
 
     for vol in "${volumes[@]}"; do
@@ -185,8 +186,8 @@ cmd_restore() {
         --target /
 
     log "Starting service..."
-    if [ -n "$compose_path" ] && [ -f "$compose_path/docker-compose.yml" ]; then
-        docker compose -f "$compose_path/docker-compose.yml" start
+    if [ -n "$compose_file" ] && [ -f "$compose_file" ]; then
+        docker compose -f "$compose_file" start
     fi
 
     log "Restore complete"

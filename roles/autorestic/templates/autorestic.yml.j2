@@ -35,6 +35,7 @@ locations:
       - {{ svc.name }}
     forget: prune
 {% set has_compose = svc.compose_path is defined %}
+{% set compose_file = svc.compose_path ~ '/' ~ (svc.compose_file | default('docker-compose.yml')) if has_compose else '' %}
 {% set pre = svc.pre_commands | default([]) %}
 {% set post = svc.post_commands | default([]) %}
 {% if pre or post or has_compose %}
@@ -45,13 +46,13 @@ locations:
         - '{{ cmd | replace("'", "''") }}'
 {% endfor %}
 {% if has_compose %}
-        - '/usr/bin/docker compose -f {{ svc.compose_path }}/docker-compose.yml stop --timeout 120'
+        - '/usr/bin/docker compose -f {{ compose_file }} stop --timeout 120'
 {% endif %}
 {% endif %}
 {% if has_compose or post %}
       after:
 {% if has_compose %}
-        - '/usr/bin/docker compose -f {{ svc.compose_path }}/docker-compose.yml start'
+        - '/usr/bin/docker compose -f {{ compose_file }} start'
 {% endif %}
 {% for cmd in post %}
         - '{{ cmd | replace("'", "''") }}'
@@ -59,7 +60,7 @@ locations:
 {% endif %}
 {% if has_compose %}
       failure:
-        - '/usr/bin/docker compose -f {{ svc.compose_path }}/docker-compose.yml start'
+        - '/usr/bin/docker compose -f {{ compose_file }} start'
 {% endif %}
 {% endif %}
 {% endfor %}
