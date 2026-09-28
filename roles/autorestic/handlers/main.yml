@@ -1,8 +1,17 @@
 ---
-# skipped on a first-run --check, where the unit was never written (tasks/systemd.yml)
+# the unit is absent whenever the role did not reach tasks/systemd.yml: a first-run
+# --check (templates write nothing) or a real run that failed earlier. restarting a
+# unit that was never written turns one real error into two, so stat it first.
+- name: check whether the backup timer unit exists
+  ansible.builtin.stat:
+    path: /etc/systemd/system/backup.timer
+  register: autorestic__timer_unit_file
+  listen: restart backup timer
+
 - name: restart backup timer
   ansible.builtin.systemd:
     name: backup.timer
     state: restarted
     daemon_reload: true
-  when: not (ansible_check_mode and (autorestic_timer_unit | default({})) is changed)
+  when: autorestic__timer_unit_file.stat.exists
+  listen: restart backup timer
