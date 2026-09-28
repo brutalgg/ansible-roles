@@ -39,8 +39,9 @@ get_repo_path() {
     grep -oP 'path:\s*\K\S+' "$CONFIG_FILE" | grep -E "/${service}\$" | head -1
 }
 
-# the compose file the backup hooks use (path + file name), read from the config
-get_compose_file() {
+# the compose invocation the backup hook uses (-f, and --env-file when the stack needs
+# one), reused verbatim so restore stops exactly what backup stopped
+get_compose_args() {
     local service="$1"
     local in_location=0
     local found_service=0
@@ -54,7 +55,7 @@ get_compose_file() {
             in_location=1
             continue
         fi
-        if [ $found_service -eq 1 ] && [[ "$line" =~ docker\ compose\ -f\ ([^[:space:]\']+)\ stop ]]; then
+        if [ $found_service -eq 1 ] && [[ "$line" =~ docker\ compose\ (.*)\ stop\ --timeout ]]; then
             echo "${BASH_REMATCH[1]}"
             return
         fi
@@ -62,6 +63,13 @@ get_compose_file() {
             break
         fi
     done < "$CONFIG_FILE"
+}
+
+# the -f value out of those args, for an existence check before invoking compose
+get_compose_file() {
+    local args
+    args=$(get_compose_args "$1")
+    [[ "$args" =~ -f\ ([^[:space:]]+) ]] && echo "${BASH_REMATCH[1]}"
 }
 
 get_volumes() {
@@ -128,8 +136,9 @@ cmd_restore() {
         esac
     done
 
-    local repo_path compose_file volumes
+    local repo_path compose_args compose_file volumes
     repo_path=$(get_repo_path "$service")
+    compose_args=$(get_compose_args "$service")
     compose_file=$(get_compose_file "$service")
     read -ra volumes <<< "$(get_volumes "$service")"
 
@@ -146,7 +155,7 @@ cmd_restore() {
     log "  Service:   $service"
     log "  Snapshot:  $snapshot"
     log "  Volumes:   ${volumes[*]}"
-    log "  Compose:   $compose_file"
+    log "  Compose:   docker compose $compose_args"
     echo ""
 
     if [ "$skip_confirm" -ne 1 ]; then
@@ -162,7 +171,8 @@ cmd_restore() {
 
     log "Stopping service..."
     if [ -n "$compose_file" ] && [ -f "$compose_file" ]; then
-        docker compose -f "$compose_file" stop --timeout 120
+        # shellcheck disable=SC2086 -- deliberate word splitting of the captured args
+        docker compose $compose_args stop --timeout 120
     else
         log "WARNING: Could not find compose file, skipping container stop"
     fi
@@ -189,7 +199,8 @@ cmd_restore() {
 
     log "Starting service..."
     if [ -n "$compose_file" ] && [ -f "$compose_file" ]; then
-        docker compose -f "$compose_file" start
+        # shellcheck disable=SC2086 -- deliberate word splitting of the captured args
+        docker compose $compose_args start
     fi
 
     log "Restore complete"

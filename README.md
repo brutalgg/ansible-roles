@@ -186,6 +186,9 @@ Restic + autorestic with systemd timers and NFS handling (managed on VMs,
 assumed-present on LXC). Renders per-host config from `autorestic_services`.
 Required: `autorestic_services` (host_vars), `autorestic_restic_password` (**vault**).
 Key: `autorestic_nfs_managed`, `autorestic_dest_dir`, `autorestic_schedule`.
+A stack whose variables come from a file not named `.env` must set
+`compose_env_file` on its entry — compose auto-loads only that one name, so the
+stop/start hooks otherwise fail on unset variables.
 A service's `volumes:` are resolved under `autorestic_docker_volumes_dir`
 (default `/var/lib/docker/volumes`) — the role never reads the docker role's
 variables, so a host whose dockerd relocates its data-root must map it in the

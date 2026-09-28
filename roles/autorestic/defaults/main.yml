@@ -69,6 +69,11 @@ autorestic_docker_volumes_dir: /var/lib/docker/volumes
 #                  stop/start (failure hook always restarts)
 #   compose_file:  compose file name inside compose_path            OPTIONAL
 #                  (default docker-compose.yml; e.g. compose.yaml)
+#   compose_env_file: env file for the stop/start hooks, relative to  OPTIONAL
+#                  compose_path or absolute. REQUIRED when the stack
+#                  interpolates variables from a file NOT named
+#                  `.env`: compose only auto-loads that one name, so
+#                  without it the hook fails on unset variables.
 #   pre_commands:  run before the stop (dumps while the app is up)  OPTIONAL
 #   post_commands: run after the start (cleanup)                    OPTIONAL
 autorestic_services: []
