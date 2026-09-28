@@ -5,6 +5,8 @@ set -euo pipefail
 INSTALL_DIR="{{ autorestic_config_dir }}"
 CONFIG_FILE="$INSTALL_DIR/.autorestic.yml"
 PASSWORD_FILE="$INSTALL_DIR/.restic-password"
+# docker data-root/volumes, matching what the config template wrote
+VOLUMES_DIR="{{ autorestic_docker_volumes_dir }}"
 
 usage() {
     cat <<'EOF'
@@ -82,7 +84,7 @@ get_volumes() {
             in_from=1
             continue
         fi
-        if [ $in_from -eq 1 ] && [[ "$line" =~ ^[[:space:]]+-[[:space:]]/var/lib/docker/volumes/([^/]+)/ ]]; then
+        if [ $in_from -eq 1 ] && [[ "$line" =~ ^[[:space:]]+-[[:space:]]"$VOLUMES_DIR"/([^/]+)/ ]]; then
             volumes+=("${BASH_REMATCH[1]}")
             continue
         fi
@@ -166,7 +168,7 @@ cmd_restore() {
     fi
 
     for vol in "${volumes[@]}"; do
-        local vol_path="/var/lib/docker/volumes/${vol}/_data"
+        local vol_path="$VOLUMES_DIR/${vol}/_data"
 
         if [ ! -d "$vol_path" ]; then
             log "WARNING: Volume path $vol_path does not exist, creating it"
@@ -193,7 +195,7 @@ cmd_restore() {
     log "Restore complete"
     log "Previous data preserved at:"
     for vol in "${volumes[@]}"; do
-        log "  /var/lib/docker/volumes/${vol}/_data.pre-restore-${timestamp}"
+        log "  $VOLUMES_DIR/${vol}/_data.pre-restore-${timestamp}"
     done
     log "Remove manually once you've verified the restore is good."
 }

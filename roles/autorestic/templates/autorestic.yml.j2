@@ -26,7 +26,7 @@ locations:
   {{ svc.name }}:
     from:
 {% for vol in svc.volumes | default([]) %}
-      - /var/lib/docker/volumes/{{ vol }}/_data
+      - {{ autorestic_docker_volumes_dir }}/{{ vol }}/_data
 {% endfor %}
 {% for path in svc.paths | default([]) %}
       - {{ path }}

@@ -186,6 +186,10 @@ Restic + autorestic with systemd timers and NFS handling (managed on VMs,
 assumed-present on LXC). Renders per-host config from `autorestic_services`.
 Required: `autorestic_services` (host_vars), `autorestic_restic_password` (**vault**).
 Key: `autorestic_nfs_managed`, `autorestic_dest_dir`, `autorestic_schedule`.
+A service's `volumes:` are resolved under `autorestic_docker_volumes_dir`
+(default `/var/lib/docker/volumes`) — the role never reads the docker role's
+variables, so a host whose dockerd relocates its data-root must map it in the
+consumer: `autorestic_docker_volumes_dir: "{{ docker_data_folder }}/volumes"`.
 
 ### `caddy` — reverse proxy / TLS
 Caddy, disabled by default. Installs **native** (systemd binary built with xcaddy,

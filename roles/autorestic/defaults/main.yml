@@ -55,6 +55,12 @@ autorestic_config_dir: /opt/backup
 # restic repository encryption password
 autorestic_restic_password: ""
 
+# where docker keeps its volumes: <data-root>/volumes. the default matches a stock
+# daemon; a host whose dockerd sets a different data-root (daemon.json "data-root")
+# MUST override this or the role hands restic paths that do not exist. the role does
+# not read the docker role's variables — the consumer maps them (docs: README).
+autorestic_docker_volumes_dir: /var/lib/docker/volumes
+
 # per-host list of services to back up (defined in host_vars). each entry:
 #   name:          service / repo name                              REQUIRED
 #   paths:         host paths to back up                            OPTIONAL
