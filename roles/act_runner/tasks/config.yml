@@ -6,6 +6,16 @@
     mode: "0644"
   notify: restart act runner
 
+# the user task in install.yml only runs for a new account, so a pre-existing one
+# may have no home; registration chdirs into it and writes .runner there
+- name: create act runner home
+  ansible.builtin.file:
+    path: "{{ act_runner_home }}"
+    state: directory
+    owner: "{{ act_runner_user if act_runner_user in ansible_facts.getent_passwd else omit }}"
+    group: "{{ act_runner_user if act_runner_user in ansible_facts.getent_passwd else omit }}"
+    mode: "0750"
+
 - name: register act runner
   ansible.builtin.command:
     cmd: >-
