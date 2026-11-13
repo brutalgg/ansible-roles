@@ -3,7 +3,7 @@
 # how the act_runner service ITSELF is installed:
 #   native    — systemd daemon running the downloaded binary (the default;
 #               byte-identical to previous releases).
-#   container — gitea/act_runner run as a docker compose service, registered via
+#   container — gitea/runner run as a docker compose service, registered via
 #               the image's env-based auto-registration.
 # NOTE this is distinct from act_runner_config_type below, which selects the JOB
 # execution backend (host vs docker) and applies in BOTH install modes. the public
@@ -33,14 +33,17 @@ act_runner_token: ""  # REQUIRED — supply from the control repo's vault
 act_runner_version: "0.2.13"
 act_runner_arch: "amd64"
 act_runner_os: "linux"
+# upstream renamed act_runner to gitea-runner at 1.0.0; the gitea/runner repo serves
+# both asset names, so only the file prefix follows the pinned version
 act_runner_download_url: >-
-  https://gitea.com/gitea/act_runner/releases/download/v{{ act_runner_version }}/act_runner-{{ act_runner_version }}-{{ act_runner_os }}-{{ act_runner_arch }}
+  https://gitea.com/gitea/runner/releases/download/v{{ act_runner_version }}/{{ 'gitea-runner' if act_runner_version is version('1.0.0', '>=') else 'act_runner' }}-{{ act_runner_version }}-{{ act_runner_os }}-{{ act_runner_arch }}
 
 # --- container install mode ---
 # everything below is consulted only when act_runner_install_mode == container.
 # the runner image, pinned to act_runner_version so the container tracks the same
 # release as the native binary.
-act_runner_image: "gitea/act_runner:{{ act_runner_version }}"
+# gitea/runner carries every tag, including the pre-1.0.0 act_runner releases
+act_runner_image: "gitea/runner:{{ act_runner_version }}"
 # compose project dir — the rendered compose.yaml and config.yaml live here.
 act_runner_compose_dir: /opt/stacks/act_runner
 # pull policy for the runner image on a provisioning run: true always re-pulls,

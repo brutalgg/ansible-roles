@@ -1,5 +1,5 @@
 ---
-# act_runner container install mode. runs gitea/act_runner as a docker compose
+# act_runner container install mode. runs gitea/runner as a docker compose
 # service. registration uses the image's env-based auto-registration
 # (GITEA_INSTANCE_URL + GITEA_RUNNER_REGISTRATION_TOKEN) instead of the
 # `act_runner register` command, so there is no host binary or runner user. the

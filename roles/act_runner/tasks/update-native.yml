@@ -3,6 +3,14 @@
 # playbooks/update.yml --tags act_runner (see docs/STANDARDS.md §3.1). install.yml
 # only fetches the binary when absent; bumping act_runner_version and running this
 # file is the deliberate "upgrade to a newer release" function.
+# runner >= 5.0.0 fetches actions and reusable workflows with git, so it needs git
+# on its PATH (container mode is covered by the image)
+- name: ensure git is installed for the runner
+  ansible.builtin.package:
+    name: git
+    state: present
+  when: act_runner_version is version('5.0.0', '>=')
+
 - name: check if act runner binary exists
   ansible.builtin.stat:
     path: "{{ act_runner_binary }}"

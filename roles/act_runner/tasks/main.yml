@@ -1,7 +1,7 @@
 ---
 # thin dispatcher: the install mode selects which install-*.yml runs. native
 # (the default) installs the systemd daemon from the downloaded binary, unchanged;
-# container runs gitea/act_runner as a docker compose service. the public
+# container runs gitea/runner as a docker compose service. the public
 # interface (act_runner_gitea_instance_url, act_runner_token, and the config vars)
 # is identical for both — a consumer switches modes with act_runner_install_mode
 # alone. NOTE this is distinct from act_runner_config_type, which selects the JOB

@@ -168,7 +168,7 @@ the deliberate upgrade is `tasks_from: update.yml` (honors the shared
 ### `act_runner` — Gitea CI runner
 Installs the runner **native** (systemd daemon from the pinned binary, the
 default) or as a **container** (`act_runner_install_mode: container` —
-`gitea/act_runner` via docker compose, registered through the image's env-based
+`gitea/runner` via docker compose, registered through the image's env-based
 auto-registration); the same config interface drives both. Independently,
 `act_runner_config_type` (`host`|`container`) selects where CI **jobs** run.
 Container install mode needs the `docker` role first. Switch an already-provisioned
