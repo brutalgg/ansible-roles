@@ -131,9 +131,18 @@ MIN_INTERVAL = {{ gitea_mirror_min_interval }}
 {% endif %}
 
 [migrations]
-ALLOW_LOCALNETWORKS = {{ gitea_migrations_allow_localnetworks | ternary('true', 'false') }}
+{% if gitea_migrations_egress_mode | length > 0 %}
+EGRESS_MODE = {{ gitea_migrations_egress_mode }}
+{% endif %}
+{% if gitea_migrations_allowed_host_list | length > 0 %}
+ALLOWED_HOST_LIST = {{ gitea_migrations_allowed_host_list }}
+{% else %}
+{% if gitea_migrations_allow_localnetworks %}
+ALLOW_LOCALNETWORKS = true
+{% endif %}
 {% if gitea_migrations_allowed_domains | length > 0 %}
 ALLOWED_DOMAINS = {{ gitea_migrations_allowed_domains }}
+{% endif %}
 {% endif %}
 SKIP_TLS_VERIFY = {{ gitea_migrations_skip_tls_verify | ternary('true', 'false') }}
 {% for section, options in gitea_extra_config.items() %}

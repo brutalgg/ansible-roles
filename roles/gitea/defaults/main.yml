@@ -130,10 +130,17 @@ gitea_mailer_from: "Gitea <no-reply@{{ gitea_domain }}>"
 gitea_mailer_force_trust_server_cert: false
 
 # --- migrations ---
-gitea_migrations_allow_localnetworks: false
-# emitted only when non-empty:
-gitea_migrations_allowed_domains: ""
+# hosts migrations/mirrors may call (gitea >= 28), e.g. "private, loopback" to
+# allow LAN sources. in the default lax egress mode public hosts are always
+# allowed and the list only gates non-public ones; "strict" makes it gate
+# everything. both emitted only when non-empty.
+gitea_migrations_allowed_host_list: ""
+gitea_migrations_egress_mode: ""
 gitea_migrations_skip_tls_verify: false
+# deprecated by gitea in favour of the host list above; emitted only when set
+# and gitea_migrations_allowed_host_list is empty
+gitea_migrations_allow_localnetworks: false
+gitea_migrations_allowed_domains: ""
 
 # --- mirror intervals (emitted only when set) ---
 gitea_mirror_default_interval: ""
